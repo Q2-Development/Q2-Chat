@@ -9,7 +9,10 @@ import os
 app = FastAPI()
 
 dotenv.load_dotenv()
-supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
+supabase: Client = create_client(
+    os.environ["SUPABASE_URL"],
+    os.environ["SUPABASE_ANON_KEY"]
+)
 
 @app.get("/")
 def read_root():
