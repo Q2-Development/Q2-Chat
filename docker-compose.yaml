@@ -1,9 +1,16 @@
 name: q2chat
 
 services:
-  # frontend:
-  #   depends_on:
-  #     - backend
+  frontend:
+    build:
+      context: frontend
+      dockerfile: frontend.dockerfile
+    depends_on:
+      - backend
+    volumes:
+    - ./frontend:/usr/src/frontend
+    ports:
+      - "8081:8081"
 
   backend:
     build:
