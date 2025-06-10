@@ -30,3 +30,9 @@ create policy "insert_own_messages" on public.messages
     for insert with check (
         chat_id in ( select id from public.chats where user_id = auth.uid() )
     );
+
+-- Enable RLS on llm_providers
+alter table public.llm_providers enable row level security;
+
+-- Enable RLS on users
+alter table public.users enable row level security;
