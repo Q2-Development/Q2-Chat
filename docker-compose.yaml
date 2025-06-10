@@ -1,4 +1,5 @@
 name: q2chat
+version: '3.8'
 
 services:
   frontend:
