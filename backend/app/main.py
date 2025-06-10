@@ -1,22 +1,24 @@
 from typing import Union
 
 from fastapi import FastAPI
-from supabase import create_client, Client
 from app.models import LoginItem
-import dotenv
-import os
+from app.supabase_client import supabase
+
 
 app = FastAPI()
-
-dotenv.load_dotenv()
-supabase: Client = create_client(
-    os.environ["SUPABASE_URL"],
-    os.environ["SUPABASE_ANON_KEY"]
-)
 
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
+
+@app.get("/supabase/health")
+async def supabase_health():
+    try:
+        result = supabase.from_("users").select("id").limit(1).execute()
+        return {"status": "ok", "rows_returned": len(result.data or [])}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 
 # Auth Functions
 

@@ -36,3 +36,7 @@ docker compose up -d
   All messages in a chat (`id`, `chat_id` → `chats.id`, `provider_id` → `llm_providers.id`,  
   `speaker` (user/assistant/system), content, created_at).  
   Persistent history and realtime updates via Supabase Realtime.  
+
+## Used Resources:
+
+https://dev.to/j0/integrating-fastapi-with-supabase-auth-780
