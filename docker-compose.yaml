@@ -12,6 +12,9 @@ services:
     - ./frontend:/usr/src/frontend
     ports:
       - "8081:8081"
+    environment:
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
 
   backend:
     build:
@@ -21,3 +24,6 @@ services:
       - ./backend:/usr/src/backend
     ports:
       - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WATCHDOG_ENABLED=true
