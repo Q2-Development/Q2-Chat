@@ -1,14 +1,27 @@
-from typing import Union
-
 from fastapi import FastAPI
+from fastapi.requests import Request
+from fastapi.responses import StreamingResponse
 from supabase import create_client, Client
-from app.models import LoginItem
+from openai import OpenAI
+from app.models import LoginItem, PromptItem
+import requests
+import json
 import dotenv
 import os
+
+DEBUG = True
 
 app = FastAPI()
 
 dotenv.load_dotenv()
+
+client = OpenAI(
+  base_url="https://openrouter.ai/api/v1",
+  api_key=os.getenv("OPENAI_API_KEY"),
+)
+
+
+
 supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
 
 @app.get("/")
@@ -46,6 +59,36 @@ def get_logout():
     supabase.auth.sign_out()
     return True
 
-@app.get("/items/{item_id}")
-def read_item(item_id: int, q: Union[str, None] = None):
-    return {"item_id": item_id, "q": q}
+
+def send_chat_prompt(item: PromptItem):
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {os.getenv("OPENAI_API_KEY")}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": item.model,
+        "messages": [{"role": "user", "content": item.prompt}],
+        "stream": True
+    }
+
+    with requests.post(url, headers=headers, json=payload, stream=True) as r:
+        for line in r.iter_lines(decode_unicode=True):
+            if not line or not line.startswith("data: "):
+                continue
+            data = line[len("data: "):]
+            if data == "[DONE]":
+                break
+            try:
+                data_obj = json.loads(data)
+                delta = data_obj["choices"][0]["delta"]
+                content = delta.get("content")
+                if content:
+                    yield content
+            except json.JSONDecodeError:
+                continue
+
+@app.post("/chat")
+def chat(request: Request, item: PromptItem):
+    return StreamingResponse(send_chat_prompt(item), media_type="text/event-stream")
