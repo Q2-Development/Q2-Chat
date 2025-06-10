@@ -1,9 +1,9 @@
 from fastapi import FastAPI
+from app.models import LoginItem, PromptItem
+from app.supabase_client import supabase
 from fastapi.requests import Request
 from fastapi.responses import StreamingResponse
-from supabase import create_client, Client
 from openai import OpenAI
-from app.models import LoginItem, PromptItem
 import requests
 import json
 import dotenv
@@ -20,14 +20,9 @@ client = OpenAI(
   api_key=os.getenv("OPENAI_API_KEY"),
 )
 
-
-
-supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
-
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
-
 # Auth Functions
 
 @app.post("/signup")
