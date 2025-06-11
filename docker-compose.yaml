@@ -1,5 +1,4 @@
 name: q2chat
-version: '3.8'
 
 services:
   frontend:
@@ -27,3 +26,5 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - WATCHDOG_ENABLED=true
+    env_file:
+      - ./backend/.env

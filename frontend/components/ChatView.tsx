@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Platform,
   KeyboardAvoidingView,
+  Animated,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { ThemedText } from '@/components/ThemedText';
@@ -28,6 +29,9 @@ interface Chat {
   messages: Message[];
   input: string;
 }
+
+const MIN_TAB_WIDTH = 90;
+const MAX_VISIBLE_TABS = 10;
 
 const ChatView = ({ 
   chat, 
@@ -96,34 +100,44 @@ const ChatView = ({
       </ScrollView>
 
       <ThemedView style={styles.inputContainer}>
-        <View style={styles.modernInputWrapper}>
-          
-          <View style={styles.inputSection}>
+        <View style={styles.inputCenterWrapper}>
+          <View style={styles.modernInputWrapper}>
             <TouchableOpacity style={styles.addButton}>
               <Text style={styles.addButtonText}>+</Text>
             </TouchableOpacity>
-            <TextInput
-              style={[styles.modernTextInput, { height: inputHeight }]}
-              value={chat.input}
-              onChangeText={(text) => onInputChange(chat.id, text)}
-              placeholder="Ask anything"
-              placeholderTextColor="#b5b4b3"
-              multiline
-              maxLength={1000}
-              onSubmitEditing={handleSend}
-              blurOnSubmit={false}
-              scrollEnabled={true}
-              textAlignVertical='top'
-              onContentSizeChange={(e) => {
-                const newHeight = e.nativeEvent.contentSize.height;
-                const minHeight = 40;
-                const maxHeight = 160;
-                setInputHeight(Math.min(Math.max(newHeight, minHeight), maxHeight));
-              }}
-            />
             
-            <TouchableOpacity style={styles.toolsButton}>
-              <Text style={styles.toolsText}>🔧 Tools</Text>
+            <View style={styles.inputSection}>
+              <TextInput
+                style={[styles.modernTextInput, { height: inputHeight }]}
+                value={chat.input}
+                onChangeText={(text) => onInputChange(chat.id, text)}
+                placeholder="Ask anything"
+                placeholderTextColor="#b5b4b3"
+                multiline
+                maxLength={1000}
+                onSubmitEditing={handleSend}
+                blurOnSubmit={false}
+                scrollEnabled={true}
+                textAlignVertical='top'
+                onContentSizeChange={(e) => {
+                  const newHeight = e.nativeEvent.contentSize.height;
+                  const minHeight = 40;
+                  const maxHeight = 160;
+                  setInputHeight(Math.min(Math.max(newHeight, minHeight), maxHeight));
+                }}
+              />
+              
+              <TouchableOpacity style={styles.toolsButton}>
+                <Text style={styles.toolsText}>🔧 Tools</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <TouchableOpacity style={styles.micButton}>
+              <Text style={styles.micText}>🎤</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.audioButton}>
+              <Text style={styles.audioText}>〰️</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.micButton}>
               <Text style={styles.micText}>🎤</Text>
@@ -133,7 +147,6 @@ const ChatView = ({
               <Text style={styles.audioText}>〰️</Text>
             </TouchableOpacity>
           </View>
-          
         </View>
       </ThemedView>
     </KeyboardAvoidingView>
@@ -142,7 +155,7 @@ const ChatView = ({
 
 export default function Chat() {
   const colorScheme = useColorScheme() ?? 'light';
-  const [chats, setChats] = useState<Chat[]>([
+  const [allChats, setAllChats] = useState<Chat[]>([
     {
       id: '1',
       title: 'New Chat',
@@ -151,12 +164,23 @@ export default function Chat() {
     },
   ]);
   
+  const [visibleTabIds, setVisibleTabIds] = useState<string[]>(['1']);
+  const [sidebarTabIds, setSidebarTabIds] = useState<string[]>([]);
   const [activeChatId, setActiveChatId] = useState('1');
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [lastTapTime, setLastTapTime] = useState<Record<string, number>>({});
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const activeChat = chats.find(chat => chat.id === activeChatId);
+  const activeChat = allChats.find(chat => chat.id === activeChatId);
+  const visibleChats = allChats.filter(chat => visibleTabIds.includes(chat.id));
+  const sidebarChats = allChats.filter(chat => sidebarTabIds.includes(chat.id));
+
+  const calculateTabWidth = () => {
+    const tabCount = visibleTabIds.length;
+    if (tabCount === 0) return 80;
+    return 80 / tabCount;
+  };
 
   const addNewChat = () => {
     const newChat: Chat = {
@@ -165,18 +189,46 @@ export default function Chat() {
       messages: [],
       input: '',
     };
-    setChats([...chats, newChat]);
+    
+    setAllChats(prev => [...prev, newChat]);
+    
+    if (visibleTabIds.length >= MAX_VISIBLE_TABS) {
+      const leftmostTabId = visibleTabIds[0];
+      setVisibleTabIds(prev => [...prev.slice(1), newChat.id]);
+      setSidebarTabIds(prev => [leftmostTabId, ...prev]);
+    } else {
+      setVisibleTabIds(prev => [...prev, newChat.id]);
+    }
+    
     setActiveChatId(newChat.id);
   };
 
   const closeChat = (chatId: string) => {
-    if (chats.length <= 1) return;
+    if (allChats.length <= 1) return;
 
-    const newChats = chats.filter(chat => chat.id !== chatId);
-    setChats(newChats);
+    const isVisible = visibleTabIds.includes(chatId);
+    const isSidebar = sidebarTabIds.includes(chatId);
+    
+    setAllChats(prev => prev.filter(chat => chat.id !== chatId));
+    
+    if (isVisible) {
+      setVisibleTabIds(prev => prev.filter(id => id !== chatId));
+      
+      if (sidebarTabIds.length > 0 && visibleTabIds.length - 1 < MAX_VISIBLE_TABS) {
+        const firstSidebarId = sidebarTabIds[0];
+        setVisibleTabIds(prev => [...prev.filter(id => id !== chatId), firstSidebarId]);
+        setSidebarTabIds(prev => prev.slice(1));
+      }
+    } else if (isSidebar) {
+      setSidebarTabIds(prev => prev.filter(id => id !== chatId));
+    }
     
     if (activeChatId === chatId) {
-      setActiveChatId(newChats[0].id);
+      const remainingChats = allChats.filter(chat => chat.id !== chatId);
+      if (remainingChats.length > 0) {
+        const nextActiveId = visibleTabIds.find(id => id !== chatId) || remainingChats[0].id;
+        setActiveChatId(nextActiveId);
+      }
     }
   };
 
@@ -193,8 +245,20 @@ export default function Chat() {
     setLastTapTime(prev => ({ ...prev, [chatId]: now }));
   };
 
+  const handleSidebarTabPress = (chatId: string) => {
+    if (visibleTabIds.length >= MAX_VISIBLE_TABS) {
+      const leftmostTabId = visibleTabIds[0];
+      setVisibleTabIds(prev => [...prev.slice(1), chatId]);
+      setSidebarTabIds(prev => [leftmostTabId, ...prev.filter(id => id !== chatId)]);
+    } else {
+      setVisibleTabIds(prev => [...prev, chatId]);
+      setSidebarTabIds(prev => prev.filter(id => id !== chatId));
+    }
+    setActiveChatId(chatId);
+  };
+
   const startEditingTab = (chatId: string) => {
-    const chat = chats.find(c => c.id === chatId);
+    const chat = allChats.find(c => c.id === chatId);
     if (chat) {
       setEditingTabId(chatId);
       setEditingTitle(chat.title);
@@ -209,13 +273,8 @@ export default function Chat() {
     setEditingTitle('');
   };
 
-  const cancelEditingTab = () => {
-    setEditingTabId(null);
-    setEditingTitle('');
-  };
-
   const updateChatTitle = (chatId: string, newTitle: string) => {
-    setChats(prevChats =>
+    setAllChats(prevChats =>
       prevChats.map(chat =>
         chat.id === chatId ? { ...chat, title: newTitle } : chat
       )
@@ -230,7 +289,7 @@ export default function Chat() {
       timestamp: new Date(),
     };
 
-    setChats(prevChats =>
+    setAllChats(prevChats =>
       prevChats.map(chat =>
         chat.id === chatId
           ? { ...chat, messages: [...chat.messages, userMessage], input: '' }
@@ -238,7 +297,7 @@ export default function Chat() {
       )
     );
 
-    const chat = chats.find(c => c.id === chatId);
+    const chat = allChats.find(c => c.id === chatId);
     if (chat && chat.messages.length === 0) {
       const title = messageText.length > 30 
         ? messageText.substring(0, 30) + '...' 
@@ -254,7 +313,7 @@ export default function Chat() {
         timestamp: new Date(),
       };
 
-      setChats(prevChats =>
+      setAllChats(prevChats =>
         prevChats.map(chat =>
           chat.id === chatId
             ? { ...chat, messages: [...chat.messages, assistantMessage] }
@@ -265,7 +324,7 @@ export default function Chat() {
   };
 
   const onInputChange = (chatId: string, text: string) => {
-    setChats(prevChats =>
+    setAllChats(prevChats =>
       prevChats.map(chat =>
         chat.id === chatId ? { ...chat, input: text } : chat
       )
@@ -288,12 +347,23 @@ export default function Chat() {
   const renderTab = (chat: Chat) => {
     const isActive = chat.id === activeChatId;
     const isEditing = editingTabId === chat.id;
-    // const tabBackgroundColor = isActive 
-    //   ? Colors[colorScheme].background 
-    //   : Colors[colorScheme].background + '80';
+    const tabWidth = calculateTabWidth();
+    {/* const tabBackgroundColor = isActive 
+      ? Colors[colorScheme].background 
+      : Colors[colorScheme].background + '80'; */}
     
     return (
-      <View key={chat.id} style={[styles.tab, isActive && styles.activeTab]}>
+      <View 
+        key={chat.id} 
+        style={[
+          styles.tab, 
+          { 
+            backgroundColor: tabBackgroundColor,
+            width: `${tabWidth}%`
+          },
+          isActive && styles.activeTab
+        ]}
+      >
         <TouchableOpacity
           style={styles.tabTouchable}
           onPress={() => handleTabPress(chat.id)}
@@ -326,13 +396,13 @@ export default function Chat() {
                 {chat.title}
               </Text>
             )}
-            {chats.length > 1 && !isEditing && (
+            {!isEditing && (
               <TouchableOpacity
                 style={[styles.closeButton, { backgroundColor: Colors[colorScheme].tint + '20' }]}
                 onPress={() => closeChat(chat.id)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Text style={[styles.closeButtonText, { color: Colors[colorScheme].text }]}>×</Text>
+                <Text style={[styles.closeButtonText, { color: Colors[colorScheme].text }]}>X</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -341,33 +411,95 @@ export default function Chat() {
     );
   };
 
+  const renderSidebarTab = (chat: Chat) => {
+    const isActive = chat.id === activeChatId;
+    
+    return (
+      <TouchableOpacity
+        key={chat.id}
+        style={[
+          styles.sidebarTab,
+          { 
+            backgroundColor: isActive 
+              ? Colors[colorScheme].tint + '20' 
+              : Colors[colorScheme].background 
+          }
+        ]}
+        onPress={() => handleSidebarTabPress(chat.id)}
+        activeOpacity={0.8}
+      >
+        <Text 
+          style={[
+            styles.sidebarTabTitle,
+            { color: Colors[colorScheme].text }
+          ]}
+          numberOfLines={1}
+        >
+          {chat.title}
+        </Text>
+        <TouchableOpacity
+          style={[styles.sidebarCloseButton, { backgroundColor: Colors[colorScheme].tint + '20' }]}
+          onPress={() => closeChat(chat.id)}
+          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+        >
+          <Text style={[styles.sidebarCloseButtonText, { color: Colors[colorScheme].text }]}>×</Text>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <ThemedView style={styles.container}>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
       
-      <View style={[
-        styles.tabBar, 
-        { 
-          backgroundColor: Colors[colorScheme].background + 'E0', 
-          borderBottomColor: Colors[colorScheme].tint + '30' 
-        }
-      ]}>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          style={styles.tabScrollView}
-          contentContainerStyle={styles.tabScrollContent}
-        >
-          {chats.map(renderTab)}
-          
-          <TouchableOpacity
-            style={[styles.addTabButton, { backgroundColor: Colors[colorScheme].tint + '20' }]}
-            onPress={addNewChat}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.addTabText, { color: Colors[colorScheme].tint }]}>+</Text>
-          </TouchableOpacity>
-        </ScrollView>
+      <View style={styles.topContainer}>
+        {sidebarChats.length > 0 && (
+          <View style={[
+            styles.sidebar,
+            { 
+              backgroundColor: Colors[colorScheme].background + 'F0',
+              borderRightColor: Colors[colorScheme].tint + '30'
+            }
+          ]}>
+            <TouchableOpacity
+              style={styles.sidebarHeader}
+              onPress={() => setSidebarCollapsed(!sidebarCollapsed)}
+            >
+              <Text style={[styles.sidebarChevron, { color: Colors[colorScheme].text }]}>
+                {sidebarCollapsed ? '▶' : '▼'}
+              </Text>
+              <Text style={[styles.sidebarHeaderText, { color: Colors[colorScheme].text }]}>
+                More ({sidebarChats.length})
+              </Text>
+            </TouchableOpacity>
+            
+            {!sidebarCollapsed && (
+              <ScrollView style={styles.sidebarContent} showsVerticalScrollIndicator={false}>
+                {sidebarChats.map(renderSidebarTab)}
+              </ScrollView>
+            )}
+          </View>
+        )}
+        
+        <View style={[
+          styles.tabBar, 
+          { 
+            backgroundColor: Colors[colorScheme].background + 'E0', 
+            borderBottomColor: Colors[colorScheme].tint + '30' 
+          }
+        ]}>
+          <View style={styles.tabRow}>
+            {visibleChats.map(renderTab)}
+            
+            <TouchableOpacity
+              style={[styles.addTabButton, { backgroundColor: Colors[colorScheme].tint + '20' }]}
+              onPress={addNewChat}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.addTabText, { color: Colors[colorScheme].tint }]}>+</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
       {activeChat && (
@@ -385,8 +517,59 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  tabBar: {
+  topContainer: {
     flexDirection: 'row',
+  },
+  sidebar: {
+    width: 200,
+    borderRightWidth: 1,
+    paddingTop: Platform.OS === 'ios' ? 44 : 0,
+  },
+  sidebarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  sidebarChevron: {
+    fontSize: 12,
+    marginRight: 8,
+  },
+  sidebarHeaderText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  sidebarContent: {
+    flex: 1,
+  },
+  sidebarTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  sidebarTabTitle: {
+    flex: 1,
+    fontSize: 14,
+    marginRight: 8,
+  },
+  sidebarCloseButton: {
+    width: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  sidebarCloseButtonText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  tabBar: {
+    flex: 1,
     borderBottomWidth: 1,
     paddingTop: Platform.OS === 'ios' ? 44 : 0,
     elevation: 4,
@@ -395,47 +578,50 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
-  tabScrollView: {
-    flex: 1,
-  },
-  tabScrollContent: {
-    alignItems: 'flex-end',
+  tabRow: {
+    flexDirection: 'row',
+    height: 48,
   },
   tab: {
+    // THESE 3 LINES
     marginTop: 5,
     marginRight: 2,
     marginLeft: 5,
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     overflow: 'hidden',
-    minWidth: 120,
-    maxWidth: 200,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
-    backgroundColor: '#39393d80'
+    // EXPERIMENT WITH THIS
+    // backgroundColor: '#39393d80'
   },
   activeTab: {
     backgroundColor: '#39393d',
     borderColor: '#5b5b60',
-    borderWidth: 1
+    borderWidth: 1,
+    // EXPERIMENT WITH THIS
+    // borderRightWidth: 1,
+    // borderRightColor: '#333',
   },
   tabTouchable: {
     flex: 1
   },
   tabContent: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 12,
-    minHeight: 40,
+    minHeight: 48,
   },
   tabTitle: {
     flex: 1,
     fontSize: 14,
     fontWeight: '500',
+    marginRight: 4,
   },
   tabEditInput: {
     flex: 1,
@@ -449,7 +635,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   closeButton: {
-    marginLeft: 8,
     width: 18,
     height: 18,
     alignItems: 'center',
@@ -463,12 +648,10 @@ const styles = StyleSheet.create({
   },
   addTabButton: {
     width: 40,
-    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
-    marginRight: 8,
   },
   addTabText: {
     fontSize: 18,
@@ -522,7 +705,12 @@ const styles = StyleSheet.create({
   inputContainer: {
     padding: 20,
     width: '80%',
-    alignSelf: 'center'
+    alignSelf: 'center',
+    // paddingHorizontal: 20,
+    // paddingVertical: 20,
+  },
+  inputCenterWrapper: {
+    alignItems: 'center',
   },
   modernInputWrapper: {
     flexDirection: 'row',
@@ -534,6 +722,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     paddingVertical: 10,
     gap: 8,
+    // EXPERIMENT WITH THIS
+    // paddingHorizontal: 8,
+    // paddingVertical: 8,
+    // width: '100%',
+    // maxWidth: 700,
+    // minHeight: 50,
   },
   addButton: {
     width: 36,
@@ -542,6 +736,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#404040',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 8,
   },
   addButtonText: {
     color: '#fff',
@@ -554,7 +749,7 @@ const styles = StyleSheet.create({
     borderColor: 'red',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    minHeight: 36,
   },
   modernTextInput: {
     flex: 1,
@@ -569,12 +764,18 @@ const styles = StyleSheet.create({
     minHeight: 40,       // 1 line
     maxHeight: 160,      // ~5–8 lines depending on line spacing
     overflowY: 'auto',  // enables scroll when needed
+    // EXPERIMENT WITH THIS
+    // maxHeight: 100,
+    // textAlignVertical: 'center',
   },
   toolsButton: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     backgroundColor: '#404040',
     borderRadius: 15,
+    marginLeft: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   toolsText: {
     color: '#fff',
@@ -588,6 +789,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#404040',
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 8,
   },
   micText: {
     fontSize: 16,
@@ -599,6 +801,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#404040',
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 8,
   },
   audioText: {
     fontSize: 16,
