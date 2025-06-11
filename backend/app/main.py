@@ -1,13 +1,17 @@
 from fastapi import FastAPI
-from app.models import LoginItem, PromptItem
-from app.supabase_client import supabase
 from fastapi.requests import Request
 from fastapi.responses import StreamingResponse
+from supabase import create_client, Client
 from openai import OpenAI
+from app.models import LoginItem, PromptItem
+
 import requests
 import json
 import dotenv
 import os
+import gotrue
+
+DEBUG = True
 
 DEBUG = True
 
@@ -19,6 +23,8 @@ client = OpenAI(
   base_url="https://openrouter.ai/api/v1",
   api_key=os.getenv("OPENAI_API_KEY"),
 )
+
+supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
 
 @app.get("/")
 def read_root():
@@ -39,15 +45,25 @@ def post_signup(item: LoginItem):
 
 @app.post("/login")
 def post_login(item: LoginItem):
-    if (item.email == None or item.email == ""): return None
+    try:
+        assert (item.email != None and item.email != "") and (item.password != None and item.password != "")
+        login = supabase.auth.sign_in_with_password(
+            {
+                "email": item.email,
+                "password": item.password
+            }
+        )
+        return {"message": "Login successful"}
 
-    response = supabase.auth.sign_in_with_password(
-        {
-            "email": item.email,
-            "password": item.password
-        }
-    )
-    return response.user
+    except gotrue.errors.AuthApiError:
+        return {"error": "Incorrect login credentials"}
+    
+    except AssertionError:
+        return {"error": "Your email and/or password was not inputted"}
+        
+@app.get("/login_status")
+def get_login_status():
+    return supabase.auth.get_user()
 
 @app.get("/logout")
 def get_logout():
