@@ -1,4 +1,6 @@
 import React, { useState, useCallback } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import {
   View,
   Text,
@@ -64,7 +66,7 @@ const ChatView = ({
       >
         {chat.messages.length === 0 ? (
           <ThemedView style={styles.emptyState}>
-            <ThemedText type="title" style={styles.emptyTitle}>What the hell are you working on?</ThemedText>
+            <ThemedText type="title" style={styles.emptyTitle}>What are you working on?</ThemedText>
           </ThemedView>
         ) : (
           chat.messages.map((message) => (
@@ -102,13 +104,9 @@ const ChatView = ({
       <ThemedView style={styles.inputContainer}>
         <View style={styles.inputCenterWrapper}>
           <View style={styles.modernInputWrapper}>
-            <TouchableOpacity style={styles.addButton}>
-              <Text style={styles.addButtonText}>+</Text>
-            </TouchableOpacity>
             
-            <View style={styles.inputSection}>
               <TextInput
-                style={[styles.modernTextInput, { height: inputHeight }]}
+                style={[styles.modernTextInput, { height: inputHeight, outline: 'none'}]}
                 value={chat.input}
                 onChangeText={(text) => onInputChange(chat.id, text)}
                 placeholder="Ask anything"
@@ -119,33 +117,38 @@ const ChatView = ({
                 blurOnSubmit={false}
                 scrollEnabled={true}
                 textAlignVertical='top'
-                onContentSizeChange={(e) => {
-                  const newHeight = e.nativeEvent.contentSize.height;
-                  const minHeight = 40;
-                  const maxHeight = 160;
-                  setInputHeight(Math.min(Math.max(newHeight, minHeight), maxHeight));
+                onChange={(e) => {
+                  const text = e.nativeEvent.text;
+                  const numLines = text.split(/\r?\n|\r|\n/g).length
+                  setInputHeight(Number(numLines * 20))
+                  // console.log('New input height: ', inputHeight)
                 }}
               />
+            
+            <View style={styles.toolsContainer}>
+              <View style={ styles.toolsLeft}>
+                <TouchableOpacity style={styles.addButton}>
+                  <Ionicons name='add' size={24} color={'white'} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.toolsButton}>
+                  <Ionicons name='options' size={24} color={'white'} />
+                  <Text style={styles.toolsText}>Tools</Text>
+                </TouchableOpacity>
+              </View>
               
-              <TouchableOpacity style={styles.toolsButton}>
-                <Text style={styles.toolsText}>🔧 Tools</Text>
-              </TouchableOpacity>
+              <View style={ styles.toolsRight }>
+                <TouchableOpacity style={styles.micButton}>
+                  <Ionicons name='mic' size={24} color={'white'} />
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.audioButton, chat.input && { backgroundColor: 'white'}]}>
+                  {
+                    chat.input ?
+                    <Ionicons name='arrow-up' size={24} color={'black'}/>:
+                    <MaterialIcons name='multitrack-audio' size={24} color={'white'} />
+                  }
+                </TouchableOpacity>
+              </View>
             </View>
-            
-            <TouchableOpacity style={styles.micButton}>
-              <Text style={styles.micText}>🎤</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.audioButton}>
-              <Text style={styles.audioText}>〰️</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.micButton}>
-              <Text style={styles.micText}>🎤</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.audioButton}>
-              <Text style={styles.audioText}>〰️</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </ThemedView>
@@ -171,6 +174,8 @@ export default function Chat() {
   const [editingTitle, setEditingTitle] = useState('');
   const [lastTapTime, setLastTapTime] = useState<Record<string, number>>({});
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [hoveredTabs, setHoveredTabs] = useState<Record<string, boolean>>({});
+
 
   const activeChat = allChats.find(chat => chat.id === activeChatId);
   const visibleChats = allChats.filter(chat => visibleTabIds.includes(chat.id));
@@ -222,6 +227,12 @@ export default function Chat() {
     } else if (isSidebar) {
       setSidebarTabIds(prev => prev.filter(id => id !== chatId));
     }
+
+    setHoveredTabs(prev => {
+      const updated = { ...prev };
+      delete updated[chatId];
+      return updated;
+    });
     
     if (activeChatId === chatId) {
       const remainingChats = allChats.filter(chat => chat.id !== chatId);
@@ -351,17 +362,21 @@ export default function Chat() {
     {/* const tabBackgroundColor = isActive 
       ? Colors[colorScheme].background 
       : Colors[colorScheme].background + '80'; */}
+
     
     return (
-      <View 
+      <View
+        onPointerEnter={() => setHoveredTabs(prev => ({ ...prev, [chat.id]: true }))}
+        onPointerLeave={() => setHoveredTabs(prev => ({ ...prev, [chat.id]: false }))}
         key={chat.id} 
         style={[
           styles.tab, 
           { 
-            backgroundColor: tabBackgroundColor,
+            // backgroundColor: tabBackgroundColor,
             width: `${tabWidth}%`
           },
-          isActive && styles.activeTab
+          hoveredTabs[chat.id] && styles.hoveredTab,
+          isActive && styles.activeTab,
         ]}
       >
         <TouchableOpacity
@@ -402,7 +417,7 @@ export default function Chat() {
                 onPress={() => closeChat(chat.id)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Text style={[styles.closeButtonText, { color: Colors[colorScheme].text }]}>X</Text>
+                <Ionicons name='close' size={16} color={'white'} />
               </TouchableOpacity>
             )}
           </View>
@@ -442,7 +457,7 @@ export default function Chat() {
           onPress={() => closeChat(chat.id)}
           hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
         >
-          <Text style={[styles.sidebarCloseButtonText, { color: Colors[colorScheme].text }]}>×</Text>
+          <Ionicons name='close' size={12} color={'white'} />
         </TouchableOpacity>
       </TouchableOpacity>
     );
@@ -496,7 +511,7 @@ export default function Chat() {
               onPress={addNewChat}
               activeOpacity={0.7}
             >
-              <Text style={[styles.addTabText, { color: Colors[colorScheme].tint }]}>+</Text>
+              <Ionicons name='add' size={24} color={'white'} />
             </TouchableOpacity>
           </View>
         </View>
@@ -585,8 +600,8 @@ const styles = StyleSheet.create({
   tab: {
     // THESE 3 LINES
     marginTop: 5,
-    marginRight: 2,
-    marginLeft: 5,
+    marginRight: 1,
+    marginLeft: 0,
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     overflow: 'hidden',
@@ -595,16 +610,20 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
+    maxWidth: 300,
     // EXPERIMENT WITH THIS
-    // backgroundColor: '#39393d80'
+    backgroundColor: '#39393d50'
   },
   activeTab: {
     backgroundColor: '#39393d',
-    borderColor: '#5b5b60',
-    borderWidth: 1,
+    // borderColor: '#5b5b60',
+    // borderWidth: 1,
     // EXPERIMENT WITH THIS
-    // borderRightWidth: 1,
-    // borderRightColor: '#333',
+    borderRightWidth: 1,
+    borderRightColor: '#333',
+  },
+  hoveredTab: {
+    backgroundColor: '#39393daa'
   },
   tabTouchable: {
     flex: 1
@@ -641,12 +660,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 9,
   },
-  closeButtonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    lineHeight: 18,
-  },
   addTabButton: {
+    marginTop: 5,
+    display: 'flex',
     width: 40,
     alignItems: 'center',
     justifyContent: 'center',
@@ -706,30 +722,45 @@ const styles = StyleSheet.create({
     padding: 20,
     width: '80%',
     alignSelf: 'center',
-    // paddingHorizontal: 20,
-    // paddingVertical: 20,
   },
   inputCenterWrapper: {
     alignItems: 'center',
   },
-  modernInputWrapper: {
+  toolsContainer: {
+    display: 'flex',
     flexDirection: 'row',
+    alignItems: 'flex-end',
+    flexGrow: 1,
+    width: '100%',
+  },
+  toolsLeft: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 'auto'
+  },
+  toolsRight: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 'auto'
+  },
+  modernInputWrapper: {
+    flexDirection: 'column',
     alignItems: 'center',
     backgroundColor: '#444447',
     borderRadius: 25,
     borderWidth: 1,
     borderColor: '#676769',
-    paddingHorizontal: 30,
-    paddingVertical: 10,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 15,
     gap: 8,
-    // EXPERIMENT WITH THIS
-    // paddingHorizontal: 8,
-    // paddingVertical: 8,
-    // width: '100%',
-    // maxWidth: 700,
-    // minHeight: 50,
+    width: '80%',
+    maxWidth: '80%'
   },
   addButton: {
+    display: 'flex',
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -743,32 +774,19 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-  inputSection: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: 'red',
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 36,
-  },
   modernTextInput: {
-    flex: 1,
-    flexDirection: 'column',
+    width: '100%',
     fontSize: 20,
     color: 'white',
-    borderWidth: 1,
-    borderColor: 'green',
     paddingVertical: 2,
     paddingHorizontal: 12,
-    // alignContent: 'center',
     minHeight: 40,       // 1 line
     maxHeight: 160,      // ~5–8 lines depending on line spacing
-    overflowY: 'auto',  // enables scroll when needed
-    // EXPERIMENT WITH THIS
-    // maxHeight: 100,
-    // textAlignVertical: 'center',
+    
   },
   toolsButton: {
+    display: 'flex',
+    flexDirection: 'row',
     paddingHorizontal: 12,
     paddingVertical: 8,
     backgroundColor: '#404040',
@@ -779,8 +797,8 @@ const styles = StyleSheet.create({
   },
   toolsText: {
     color: '#fff',
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 16,
+    marginLeft: 5
   },
   micButton: {
     width: 36,
