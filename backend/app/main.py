@@ -1,10 +1,10 @@
 from fastapi import FastAPI
 from fastapi.requests import Request
 from fastapi.responses import StreamingResponse
-from supabase import create_client, Client
 from postgrest.base_request_builder import APIResponse
 from openai import OpenAI
 from app.models import LoginItem, PromptItem
+from app.auth.supabase_client import supabase
 from app.auth.functions import get_temp_user
 from app.chat.functions import get_chat_messages, send_chat_prompt
 import uuid
@@ -29,7 +29,7 @@ client = OpenAI(
   api_key=os.getenv("OPENAI_API_KEY"),
 )
 
-supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
+supabase = supabase
 
 @app.get("/")
 def read_root():
@@ -119,11 +119,11 @@ def chat(item: PromptItem):
                 .execute()
                 
         # Load messages for context and add the prompt to the db
-        messages = get_chat_messages(supabase, item.chatId)
+        messages = get_chat_messages(item.chatId)
         messages.data.sort(key=lambda m: m.get("created_at"))
 
         # Use normal function if debugging is needed
         # return send_chat_prompt(item, user, messages)
-        return StreamingResponse(send_chat_prompt(supabase, item, user, messages), media_type="text/event-stream")
+        return StreamingResponse(send_chat_prompt(item, user, messages), media_type="text/event-stream")
     except Exception as e:
         return {"error": e}
