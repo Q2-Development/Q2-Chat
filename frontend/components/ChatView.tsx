@@ -94,36 +94,38 @@ const ChatView = ({
       </ScrollView>
 
       <ThemedView style={styles.inputContainer}>
-        <View style={styles.modernInputWrapper}>
-          <TouchableOpacity style={styles.addButton}>
-            <Text style={styles.addButtonText}>+</Text>
-          </TouchableOpacity>
-          
-          <View style={styles.inputSection}>
-            <TextInput
-              style={styles.modernTextInput}
-              value={chat.input}
-              onChangeText={(text) => onInputChange(chat.id, text)}
-              placeholder="Ask anything"
-              placeholderTextColor="#888"
-              multiline
-              maxLength={1000}
-              onSubmitEditing={handleSend}
-              blurOnSubmit={false}
-            />
+        <View style={styles.inputCenterWrapper}>
+          <View style={styles.modernInputWrapper}>
+            <TouchableOpacity style={styles.addButton}>
+              <Text style={styles.addButtonText}>+</Text>
+            </TouchableOpacity>
             
-            <TouchableOpacity style={styles.toolsButton}>
-              <Text style={styles.toolsText}>🔧 Tools</Text>
+            <View style={styles.inputSection}>
+              <TextInput
+                style={styles.modernTextInput}
+                value={chat.input}
+                onChangeText={(text) => onInputChange(chat.id, text)}
+                placeholder="Ask anything"
+                placeholderTextColor="#888"
+                multiline
+                maxLength={1000}
+                onSubmitEditing={handleSend}
+                blurOnSubmit={false}
+              />
+              
+              <TouchableOpacity style={styles.toolsButton}>
+                <Text style={styles.toolsText}>🔧 Tools</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <TouchableOpacity style={styles.micButton}>
+              <Text style={styles.micText}>🎤</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.audioButton}>
+              <Text style={styles.audioText}>〰️</Text>
             </TouchableOpacity>
           </View>
-          
-          <TouchableOpacity style={styles.micButton}>
-            <Text style={styles.micText}>🎤</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.audioButton}>
-            <Text style={styles.audioText}>〰️</Text>
-          </TouchableOpacity>
         </View>
       </ThemedView>
     </KeyboardAvoidingView>
@@ -501,16 +503,22 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   inputContainer: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+  },
+  inputCenterWrapper: {
+    alignItems: 'center',
   },
   modernInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#2a2a2a',
     borderRadius: 25,
-    paddingHorizontal: 6,
-    paddingVertical: 6,
-    gap: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    width: '100%',
+    maxWidth: 700,
+    minHeight: 50,
   },
   addButton: {
     width: 36,
@@ -519,6 +527,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#404040',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 8,
   },
   addButtonText: {
     color: '#fff',
@@ -529,7 +538,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    minHeight: 36,
   },
   modernTextInput: {
     flex: 1,
@@ -538,12 +547,16 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     maxHeight: 100,
+    textAlignVertical: 'center',
   },
   toolsButton: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     backgroundColor: '#404040',
     borderRadius: 15,
+    marginLeft: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   toolsText: {
     color: '#fff',
@@ -557,6 +570,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#404040',
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 8,
   },
   micText: {
     fontSize: 16,
@@ -568,6 +582,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#404040',
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 8,
   },
   audioText: {
     fontSize: 16,
