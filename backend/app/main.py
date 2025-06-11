@@ -18,6 +18,8 @@ import logging
 logger = logging.getLogger(__name__)
 DEBUG = True
 
+DEBUG = True
+
 app = FastAPI()
 
 dotenv.load_dotenv()
@@ -32,7 +34,6 @@ supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
-
 # Auth Functions
 
 @app.post("/signup")

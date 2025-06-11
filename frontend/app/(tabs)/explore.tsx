@@ -7,6 +7,7 @@ import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import React from 'react';
 
 export default function TabTwoScreen() {
   return (
@@ -90,6 +91,12 @@ export default function TabTwoScreen() {
               component provides a parallax effect for the header image.
             </ThemedText>
           ),
+          default: (
+            <ThemedText>
+              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
+              component provides a standard parallax effect.
+            </ThemedText>
+          )
         })}
       </Collapsible>
     </ParallaxScrollView>
