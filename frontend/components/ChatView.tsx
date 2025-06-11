@@ -39,6 +39,8 @@ const ChatView = ({
   onInputChange: (chatId: string, text: string) => void;
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
+  const [inputHeight, setInputHeight] = useState(40);
+
 
   const handleSend = () => {
     if (chat.input.trim()) {
@@ -58,7 +60,7 @@ const ChatView = ({
       >
         {chat.messages.length === 0 ? (
           <ThemedView style={styles.emptyState}>
-            <ThemedText type="title" style={styles.emptyTitle}>What are you working on?</ThemedText>
+            <ThemedText type="title" style={styles.emptyTitle}>What the hell are you working on?</ThemedText>
           </ThemedView>
         ) : (
           chat.messages.map((message) => (
@@ -95,35 +97,43 @@ const ChatView = ({
 
       <ThemedView style={styles.inputContainer}>
         <View style={styles.modernInputWrapper}>
-          <TouchableOpacity style={styles.addButton}>
-            <Text style={styles.addButtonText}>+</Text>
-          </TouchableOpacity>
           
           <View style={styles.inputSection}>
+            <TouchableOpacity style={styles.addButton}>
+              <Text style={styles.addButtonText}>+</Text>
+            </TouchableOpacity>
             <TextInput
-              style={styles.modernTextInput}
+              style={[styles.modernTextInput, { height: inputHeight }]}
               value={chat.input}
               onChangeText={(text) => onInputChange(chat.id, text)}
               placeholder="Ask anything"
-              placeholderTextColor="#888"
+              placeholderTextColor="#b5b4b3"
               multiline
               maxLength={1000}
               onSubmitEditing={handleSend}
               blurOnSubmit={false}
+              scrollEnabled={true}
+              textAlignVertical='top'
+              onContentSizeChange={(e) => {
+                const newHeight = e.nativeEvent.contentSize.height;
+                const minHeight = 40;
+                const maxHeight = 160;
+                setInputHeight(Math.min(Math.max(newHeight, minHeight), maxHeight));
+              }}
             />
             
             <TouchableOpacity style={styles.toolsButton}>
               <Text style={styles.toolsText}>🔧 Tools</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.micButton}>
+              <Text style={styles.micText}>🎤</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.audioButton}>
+              <Text style={styles.audioText}>〰️</Text>
+            </TouchableOpacity>
           </View>
           
-          <TouchableOpacity style={styles.micButton}>
-            <Text style={styles.micText}>🎤</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.audioButton}>
-            <Text style={styles.audioText}>〰️</Text>
-          </TouchableOpacity>
         </View>
       </ThemedView>
     </KeyboardAvoidingView>
@@ -278,12 +288,12 @@ export default function Chat() {
   const renderTab = (chat: Chat) => {
     const isActive = chat.id === activeChatId;
     const isEditing = editingTabId === chat.id;
-    const tabBackgroundColor = isActive 
-      ? Colors[colorScheme].background 
-      : Colors[colorScheme].background + '80';
+    // const tabBackgroundColor = isActive 
+    //   ? Colors[colorScheme].background 
+    //   : Colors[colorScheme].background + '80';
     
     return (
-      <View key={chat.id} style={[styles.tab, { backgroundColor: tabBackgroundColor }]}>
+      <View key={chat.id} style={[styles.tab, isActive && styles.activeTab]}>
         <TouchableOpacity
           style={styles.tabTouchable}
           onPress={() => handleTabPress(chat.id)}
@@ -392,7 +402,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   tab: {
-    marginRight: 1,
+    marginTop: 5,
+    marginRight: 2,
+    marginLeft: 5,
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     overflow: 'hidden',
@@ -403,9 +415,15 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
+    backgroundColor: '#39393d80'
+  },
+  activeTab: {
+    backgroundColor: '#39393d',
+    borderColor: '#5b5b60',
+    borderWidth: 1
   },
   tabTouchable: {
-    flex: 1,
+    flex: 1
   },
   tabContent: {
     flexDirection: 'row',
@@ -423,6 +441,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: '500',
+    width: 200,
     borderWidth: 1,
     borderRadius: 4,
     paddingHorizontal: 8,
@@ -502,14 +521,18 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     padding: 20,
+    width: '80%',
+    alignSelf: 'center'
   },
   modernInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2a2a2a',
+    backgroundColor: '#444447',
     borderRadius: 25,
-    paddingHorizontal: 6,
-    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#676769',
+    paddingHorizontal: 30,
+    paddingVertical: 10,
     gap: 8,
   },
   addButton: {
@@ -527,17 +550,25 @@ const styles = StyleSheet.create({
   },
   inputSection: {
     flex: 1,
+    borderWidth: 1,
+    borderColor: 'red',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   modernTextInput: {
     flex: 1,
-    fontSize: 16,
-    color: '#fff',
-    paddingVertical: 8,
+    flexDirection: 'column',
+    fontSize: 20,
+    color: 'white',
+    borderWidth: 1,
+    borderColor: 'green',
+    paddingVertical: 2,
     paddingHorizontal: 12,
-    maxHeight: 100,
+    // alignContent: 'center',
+    minHeight: 40,       // 1 line
+    maxHeight: 160,      // ~5–8 lines depending on line spacing
+    overflowY: 'auto',  // enables scroll when needed
   },
   toolsButton: {
     paddingHorizontal: 12,
