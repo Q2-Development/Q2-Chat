@@ -4,11 +4,14 @@ from fastapi.responses import StreamingResponse
 from supabase import create_client, Client
 from openai import OpenAI
 from app.models import LoginItem, PromptItem
+
 import requests
 import json
 import dotenv
 import os
 import gotrue
+
+DEBUG = True
 
 DEBUG = True
 
@@ -26,7 +29,6 @@ supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
-
 # Auth Functions
 
 @app.post("/signup")
