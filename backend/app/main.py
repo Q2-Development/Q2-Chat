@@ -1,16 +1,21 @@
 from fastapi import FastAPI
 from fastapi.requests import Request
 from fastapi.responses import StreamingResponse
-from supabase import create_client, Client
+from postgrest.base_request_builder import APIResponse
 from openai import OpenAI
 from app.models import LoginItem, PromptItem
-
+from app.auth.supabase_client import supabase
+from app.auth.functions import get_temp_user
+from app.chat.functions import get_chat_messages, send_chat_prompt
+import uuid
 import requests
-import json
 import dotenv
 import os
 import gotrue
+import logging
 
+
+logger = logging.getLogger(__name__)
 DEBUG = True
 
 DEBUG = True
@@ -24,7 +29,7 @@ client = OpenAI(
   api_key=os.getenv("OPENAI_API_KEY"),
 )
 
-supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
+supabase = supabase
 
 @app.get("/")
 def read_root():
@@ -70,36 +75,55 @@ def get_logout():
     supabase.auth.sign_out()
     return True
 
+# Send chat info
 
-def send_chat_prompt(item: PromptItem):
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {os.getenv("OPENAI_API_KEY")}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "model": item.model,
-        "messages": [{"role": "user", "content": item.prompt}],
-        "stream": True
-    }
-
-    with requests.post(url, headers=headers, json=payload, stream=True) as r:
-        for line in r.iter_lines(decode_unicode=True):
-            if not line or not line.startswith("data: "):
-                continue
-            data = line[len("data: "):]
-            if data == "[DONE]":
-                break
-            try:
-                data_obj = json.loads(data)
-                delta = data_obj["choices"][0]["delta"]
-                content = delta.get("content")
-                if content:
-                    yield content
-            except json.JSONDecodeError:
-                continue
+@app.get("/models")
+def get_models():
+    r = requests.get("https://openrouter.ai/api/v1/models")
+    if r.status_code >= 200 and r.status_code <= 299:
+        return r.text
+    else:
+        return {"error": "Failed to retrieve models"}
 
 @app.post("/chat")
-def chat(request: Request, item: PromptItem):
-    return StreamingResponse(send_chat_prompt(item), media_type="text/event-stream")
+def chat(item: PromptItem):
+    try:
+        # Get the current user to assign the chat to them.
+        user = supabase.auth.get_user()
+        chat: APIResponse
+        if not user:
+            logger.info("Guest Mode active")
+            user = get_temp_user()
+        else: 
+            user = user.user
+
+        # Find the associated chat if it is an old one
+        # Technically the user check could be removed since the likelihood of a UUID
+        # conflict is virtually impossible without manual manipulation
+        # If the row with the user is not found, we should randomly generate a new one
+        if item.chatId != None:
+            chat = supabase.table("chats") \
+                .select("*") \
+                .eq("user_id", user.id) \
+                .eq("id", item.chatId) \
+                .execute()
+
+        # Make sure the chat actually exists
+        # If not we need to create it
+        if item.chatId == None or len(chat.data) != 1:
+            item.chatId = str(uuid.uuid4())
+
+            # Probably should have the new chat name auto change after the initial prompting
+            supabase.table("chats") \
+                .insert({"id": item.chatId, "user_id": user.id, "title": "New Chat"}) \
+                .execute()
+                
+        # Load messages for context and add the prompt to the db
+        messages = get_chat_messages(item.chatId)
+        messages.data.sort(key=lambda m: m.get("created_at"))
+
+        # Use normal function if debugging is needed
+        # return send_chat_prompt(item, user, messages)
+        return StreamingResponse(send_chat_prompt(item, user, messages), media_type="text/event-stream")
+    except Exception as e:
+        return {"error": e}
