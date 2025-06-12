@@ -1,3 +1,4 @@
+import { Chat } from "@/types/chat";
 import { IoClose } from "react-icons/io5";
 
 interface Props {

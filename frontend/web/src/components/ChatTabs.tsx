@@ -1,5 +1,6 @@
 import { IoAdd, IoClose } from "react-icons/io5";
 import { Fragment } from "react";
+import { Chat } from "@/types/chat";
 
 interface Props {
   chats: Chat[];
@@ -22,6 +23,7 @@ export default function ChatTabs({
     <div className="flex bg-neutral-800 px-4 pt-3 border-b-3 border-neutral-700 max-w-full">
       {visibleTabIds.map((id, index) => {
         const chat = chats.find((c) => c.id === id)!;
+        const isLastTab = index === visibleTabIds.length - 1;
         return (
           <Fragment key={id}>
               <div
@@ -35,16 +37,18 @@ export default function ChatTabs({
                   <IoClose size={16} />
                 </button>
               </div>
-              { (id !== activeChatId) && <div className="separator w-[1px] bg-neutral-500 h-[65%] flex self-center mt-1"></div>}
+              {!isLastTab && <div className="separator w-[1px] bg-neutral-500 h-[65%] flex self-center mt-1"></div>}
+              {isLastTab && (
+                <button
+                  className="bg-transparent hover:bg-neutral-700 p-1 rounded-md self-center ml-1"
+                  onClick={addNewChat}
+                >
+                  <IoAdd size={20} />
+                </button>
+              )}
           </Fragment>
         );
       })}
-      <button
-        className="ml-auto bg-transparent hover:bg-neutral-700 p-1 rounded-md self-center"
-        onClick={addNewChat}
-      >
-        <IoAdd size={20} />
-      </button>
     </div>
   );
 }

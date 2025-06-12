@@ -8,6 +8,7 @@ interface ChatState {
   activeChatId: string;
   setActiveChatId: (id: string) => void;
   handleInputChange: (text: string) => void;
+  handleModelChange: (model: string) => void;
   handleSendMessage: () => void;
   addNewChat: () => void;
   closeChat: (chatId: string) => void;
@@ -15,7 +16,13 @@ interface ChatState {
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
-  chats: [{ id: "1", title: "New Chat", messages: [], input: "" }],
+  chats: [{ 
+    id: "1", 
+    title: "New Chat", 
+    messages: [], 
+    input: "",
+    model: "openai/gpt-3.5-turbo"
+  }],
   visibleTabIds: ["1"],
   sidebarTabIds: [],
   activeChatId: "1",
@@ -27,6 +34,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       chats: chats.map((chat) =>
         chat.id === activeChatId ? { ...chat, input: text } : chat
+      ),
+    });
+  },
+
+  handleModelChange: (model: string) => {
+    const { activeChatId, chats } = get();
+    set({
+      chats: chats.map((chat) =>
+        chat.id === activeChatId ? { ...chat, model } : chat
       ),
     });
   },
@@ -51,31 +67,103 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ),
     });
 
+    const assistantMessageId = (Date.now() + 1).toString();
+    const assistantMessage: Message = {
+      id: assistantMessageId,
+      text: "",
+      isUser: false,
+      timestamp: new Date(),
+      isStreaming: true,
+    };
+
+    set({
+      chats: get().chats.map((chat) =>
+        chat.id === activeChatId
+          ? { ...chat, messages: [...chat.messages, assistantMessage] }
+          : chat
+      ),
+    });
+
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage.text }),
+        body: JSON.stringify({ 
+          message: userMessage.text,
+          model: activeChat.model 
+        }),
       });
 
-      const data = await response.json();
-      
-      const assistantReply: Message = {
-        id: (Date.now() + 1).toString(),
-        text: data.reply,
-        isUser: false,
-        timestamp: new Date(),
-      };
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedText = "";
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) break;
+          
+          const chunk = decoder.decode(value, { stream: true });
+          accumulatedText += chunk;
+          
+          set({
+            chats: get().chats.map((chat) =>
+              chat.id === activeChatId
+                ? {
+                    ...chat,
+                    messages: chat.messages.map((msg) =>
+                      msg.id === assistantMessageId
+                        ? { ...msg, text: accumulatedText }
+                        : msg
+                    ),
+                  }
+                : chat
+            ),
+          });
+        }
+      }
 
       set({
         chats: get().chats.map((chat) =>
           chat.id === activeChatId
-            ? { ...chat, messages: [...chat.messages, assistantReply] }
+            ? {
+                ...chat,
+                messages: chat.messages.map((msg) =>
+                  msg.id === assistantMessageId
+                    ? { ...msg, isStreaming: false }
+                    : msg
+                ),
+              }
             : chat
         ),
       });
+
     } catch (error) {
       console.error('Failed to send message:', error);
+      
+      set({
+        chats: get().chats.map((chat) =>
+          chat.id === activeChatId
+            ? {
+                ...chat,
+                messages: chat.messages.map((msg) =>
+                  msg.id === assistantMessageId
+                    ? { 
+                        ...msg, 
+                        text: "Sorry, I encountered an error while processing your message. Please try again.",
+                        isStreaming: false 
+                      }
+                    : msg
+                ),
+              }
+            : chat
+        ),
+      });
     }
   },
 
@@ -86,6 +174,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       title: "New Chat",
       messages: [],
       input: "",
+      model: "openai/gpt-3.5-turbo",
     };
 
     set({ chats: [...chats, newChat] });
@@ -153,4 +242,4 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
     }
   },
-})); 
+}));
