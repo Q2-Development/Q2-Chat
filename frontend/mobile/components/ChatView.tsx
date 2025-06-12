@@ -11,10 +11,10 @@ import {
   Animated,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import { ThemedText } from '@/mobile/components/ThemedText';
+import { ThemedView } from '@/mobile/components/ThemedView';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { Colors } from '@/constants/Colors';
+import { Colors } from '@/mobile/constants/Colors';
 
 interface Message {
   id: string;
