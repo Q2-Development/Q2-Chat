@@ -1,5 +1,6 @@
 import { IoAdd, IoOptionsOutline, IoMic } from "react-icons/io5";
 import { FaArrowUp } from "react-icons/fa6";
+import styles from "./ChatInput.module.css";
 
 interface Props {
     inputValue: string;
@@ -9,7 +10,7 @@ interface Props {
 
 export default function ChatInput({ inputValue, onInputChange, onSend }: Props) {
     return (
-        <div className="input-container p-5 mb-7 max-w-[60%] rounded-3xl bg-neutral-800 container flex flex-col mt-auto self-center">
+        <div className={`${styles.inputContainer} p-5 mb-7 max-w-[60%] rounded-3xl bg-neutral-800 container flex flex-col mt-auto self-center`}>
             <textarea
                 name="prompt-input"
                 className="outline-0 resize-none"
