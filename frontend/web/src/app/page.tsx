@@ -16,6 +16,7 @@ export default function ChatPage() {
     setActiveChatId,
     handleInputChange,
     handleSendMessage,
+    handleModelChange,
     addNewChat,
     closeChat,
     moveFromSidebar,
@@ -48,8 +49,10 @@ export default function ChatPage() {
 
         <ChatInput
           inputValue={activeChat.input}
+          selectedModel={activeChat.model}
           onInputChange={handleInputChange}
           onSend={handleSendMessage}
+          onModelChange={handleModelChange}
         />
       </div>
     </div>

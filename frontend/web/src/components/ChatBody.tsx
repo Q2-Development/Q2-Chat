@@ -3,6 +3,7 @@ interface Message {
   text: string;
   isUser: boolean;
   timestamp: Date;
+  isStreaming?: boolean;
 }
 
 export default function ChatBody({ messages }: { messages: Message[] }) {
@@ -22,6 +23,9 @@ export default function ChatBody({ messages }: { messages: Message[] }) {
                 }`}
               >
                 {msg.text}
+                {msg.isStreaming && (
+                  <span className="inline-block w-2 h-5 bg-white ml-1 animate-pulse" />
+                )}
               </div>
             ))
           )}
