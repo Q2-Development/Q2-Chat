@@ -1,45 +1,160 @@
 "use client";
 
-import { useState, KeyboardEvent, ChangeEvent } from "react";
-import type { NextPage } from "next";
-import { IoAdd,IoOptionsOutline, IoMic} from "react-icons/io5";
-import { FaArrowUp } from "react-icons/fa6";
+import { useState } from "react";
+import ChatTabs from "@/components/ChatTabs";
+import SidebarTabs from "@/components/SidebarTabs";
+import ChatBody from "@/components/ChatBody";
+import ChatInput from "@/components/ChatInput";
 
 interface Message {
-  role: "user" | "assistant";
-  content: string;
+  id: string;
+  text: string;
+  isUser: boolean;
+  timestamp: Date;
 }
 
-const Home: NextPage = () => {
+interface Chat {
+  id: string;
+  title: string;
+  messages: Message[];
+  input: string;
+}
+
+const MAX_VISIBLE_TABS = 4;
+
+export default function ChatPage() {
+  const [chats, setChats] = useState<Chat[]>([
+    { id: "1", title: "New Chat", messages: [], input: "" },
+  ]);
+  const [visibleTabIds, setVisibleTabIds] = useState<string[]>(["1"]);
+  const [sidebarTabIds, setSidebarTabIds] = useState<string[]>([]);
+  const [activeChatId, setActiveChatId] = useState("1");
+
+  const activeChat = chats.find((c) => c.id === activeChatId)!;
+
+  const handleInputChange = (text: string) => {
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === activeChatId ? { ...chat, input: text } : chat
+      )
+    );
+  };
+
+  const handleSendMessage = () => {
+    if (!activeChat.input.trim()) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      text: activeChat.input.trim(),
+      isUser: true,
+      timestamp: new Date(),
+    };
+
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === activeChatId
+          ? { ...chat, messages: [...chat.messages, userMessage], input: "" }
+          : chat
+      )
+    );
+
+    setTimeout(() => {
+      const assistantReply: Message = {
+        id: (Date.now() + 1).toString(),
+        text: "Here's a helpful reply!",
+        isUser: false,
+        timestamp: new Date(),
+      };
+
+      setChats((prev) =>
+        prev.map((chat) =>
+          chat.id === activeChatId
+            ? { ...chat, messages: [...chat.messages, assistantReply] }
+            : chat
+        )
+      );
+    }, 1000);
+  };
+
+  const addNewChat = () => {
+    const newChat: Chat = {
+      id: Date.now().toString(),
+      title: "New Chat",
+      messages: [],
+      input: "",
+    };
+
+    setChats((prev) => [...prev, newChat]);
+    if (visibleTabIds.length >= MAX_VISIBLE_TABS) {
+      const movedToSidebar = visibleTabIds[0];
+      setVisibleTabIds((prev) => [...prev.slice(1), newChat.id]);
+      setSidebarTabIds((prev) => [movedToSidebar, ...prev]);
+    } else {
+      setVisibleTabIds((prev) => [...prev, newChat.id]);
+    }
+    setActiveChatId(newChat.id);
+  };
+
+  const closeChat = (chatId: string) => {
+    if (chats.length <= 1) return;
+    const isVisible = visibleTabIds.includes(chatId);
+
+    setChats((prev) => prev.filter((c) => c.id !== chatId));
+    setVisibleTabIds((prev) => prev.filter((id) => id !== chatId));
+    setSidebarTabIds((prev) => prev.filter((id) => id !== chatId));
+
+    if (isVisible && sidebarTabIds.length > 0) {
+      const toPromote = sidebarTabIds[0];
+      setVisibleTabIds((prev) => [...prev, toPromote]);
+      setSidebarTabIds((prev) => prev.slice(1));
+    }
+
+    if (activeChatId === chatId) {
+      setActiveChatId(visibleTabIds.find((id) => id !== chatId) || chats[0].id);
+    }
+  };
+
+  const moveFromSidebar = (chatId: string) => {
+    if (visibleTabIds.length >= MAX_VISIBLE_TABS) {
+      const toSidebar = visibleTabIds[0];
+      setVisibleTabIds((prev) => [...prev.slice(1), chatId]);
+      setSidebarTabIds((prev) => [toSidebar, ...prev.filter((id) => id !== chatId)]);
+    } else {
+      setVisibleTabIds((prev) => [...prev, chatId]);
+      setSidebarTabIds((prev) => prev.filter((id) => id !== chatId));
+    }
+    setActiveChatId(chatId);
+  };
 
   return (
-    <main className="min-h-screen bg-neutral-900 text-white p-6 border border-red-600 items-center flex flex-col">
-      <div className="tabs-container border border-yellow-400 container">These are the tabs</div>
-      <div className="chat-container border border-green-600 container">This will hold the messages</div>
-      <div className="input-container p-5 max-w-[60%] border rounded-3xl border-neutral-600 bg-neutral-800 container flex flex-col mt-auto">
-        <textarea name="prompt-input" className="outline-0 resize-none" id="prompt-input" rows={5}></textarea>
-        <div className="input-menu-container mt-2.5 flex">
-          <div className="flex">
-            <button className="p-2 min-w-10 min-h-10 flex justify-center items-center bg-neutral-700 rounded-3xl mr-2">
-              <IoAdd size={24}/>
-            </button>
-            <button className="py-2 px-3.5 min-w-10 min-h-10 flex justify-center items-center bg-neutral-700 rounded-3xl flex mr-auto">
-              <IoOptionsOutline size={22} />
-              <span className="ml-2 text-sm font-medium">Tools</span>
-            </button>
-          </div>
-          <div className="flex ml-auto">
-            <button className="p-2 min-w-10 min-h-10 flex justify-center items-center bg-neutral-700 rounded-3xl mr-2">
-              <IoMic size={24} />
-            </button>
-            <button className="p-2 min-w-10 min-h-10 flex justify-center items-center bg-neutral-700 rounded-3xl">
-              <FaArrowUp size={18} />
-            </button>
-          </div>
-        </div>
-      </div>
-    </main>
-  );
-};
+    <div className="flex h-screen bg-neutral-900 text-white">
+      {sidebarTabIds.length > 0 && (
+        <SidebarTabs
+          sidebarTabIds={sidebarTabIds}
+          chats={chats}
+          closeChat={closeChat}
+          moveFromSidebar={moveFromSidebar}
+        />
+      )}
 
-export default Home;
+      <div className="flex-1 flex flex-col">
+        <ChatTabs
+          chats={chats}
+          visibleTabIds={visibleTabIds}
+          activeChatId={activeChatId}
+          setActiveChatId={setActiveChatId}
+          closeChat={closeChat}
+          addNewChat={addNewChat}
+        />
+
+        <ChatBody messages={activeChat.messages} />
+
+        <ChatInput
+          inputValue={activeChat.input}
+          onInputChange={handleInputChange}
+          onSend={handleSendMessage}
+        />
+      </div>
+    </div>
+  );
+}
