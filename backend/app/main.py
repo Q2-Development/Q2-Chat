@@ -19,8 +19,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 DEBUG = True
 
-DEBUG = True
-
 app = FastAPI()
 
 dotenv.load_dotenv()
@@ -35,6 +33,8 @@ supabase = supabase
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
+
+
 # Auth Functions
 
 @app.post("/signup")
@@ -86,6 +86,26 @@ def get_models():
     else:
         return {"error": "Failed to retrieve models"}
 
+@app.get("/chats")
+def get_chats():
+    try:
+        user = supabase.auth.get_user()
+        if not user:
+            logger.info("Guest Mode active")
+            user = create_temp_user().user
+        else: 
+            user = user.user
+        
+        chats = supabase.table("chats") \
+            .select("id, title") \
+            .eq("user_id", user.id) \
+            .execute()
+        return chats.data
+    
+    except:
+        print("No user logged in")
+        return {"error": "No user logged in"}
+
 @app.post("/chat")
 def chat(item: PromptItem):
     try:
@@ -94,7 +114,7 @@ def chat(item: PromptItem):
         chat: APIResponse
         if not user:
             logger.info("Guest Mode active")
-            user = get_temp_user()
+            user = create_temp_user().user
         else: 
             user = user.user
 
