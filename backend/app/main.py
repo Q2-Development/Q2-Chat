@@ -113,14 +113,12 @@ def chat(item: PromptItem):
         # If not we need to create it
         if item.chatId == None or len(chat.data) != 1:
             item.chatId = str(uuid.uuid4())
-            logger.info(f"🔨 Created new chat with ID: {item.chatId}")
             # Probably should have the new chat name auto change after the initial prompting
             supabase.table("chats") \
                 .insert({"id": item.chatId, "user_id": user.id, "title": "New Chat"}) \
                 .execute()
                 
             title = generate_chat_title(client, item.prompt)
-            logger.info(f"🛠️  Updating chat {item.chatId} title to: {title}")
             supabase.table("chats").update({"title": title}).eq("id", item.chatId).execute()
         # Load messages for context and add the prompt to the db
         messages = get_chat_messages(item.chatId)
@@ -140,8 +138,6 @@ def get_chat_title(chat_id: str):
         .eq("id", chat_id) \
         .single() \
         .execute()
-
-    logger.info(f"GET /chat/{chat_id}/title → supabase resp.data = {resp.data}")
 
     data = getattr(resp, "data", None)
     if data is None:
