@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 from fastapi.requests import Request
 from fastapi.responses import StreamingResponse
-from supabase import create_client, Client
 from postgrest.base_request_builder import APIResponse
 from openai import OpenAI
 from app.models import LoginItem, PromptItem
-from app.auth.functions import get_temp_user
+from app.auth.supabase_client import supabase
+from app.auth.functions import create_temp_user
 from app.chat.functions import get_chat_messages, send_chat_prompt
 import uuid
 import requests
@@ -18,8 +18,6 @@ import logging
 logger = logging.getLogger(__name__)
 DEBUG = True
 
-DEBUG = True
-
 app = FastAPI()
 
 dotenv.load_dotenv()
@@ -29,11 +27,13 @@ client = OpenAI(
   api_key=os.getenv("OPENAI_API_KEY"),
 )
 
-supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
+supabase = supabase
 
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
+
+
 # Auth Functions
 
 @app.post("/signup")
@@ -85,6 +85,26 @@ def get_models():
     else:
         return {"error": "Failed to retrieve models"}
 
+@app.get("/chats")
+def get_chats():
+    try:
+        user = supabase.auth.get_user()
+        if not user:
+            logger.info("Guest Mode active")
+            user = create_temp_user().user
+        else: 
+            user = user.user
+        
+        chats = supabase.table("chats") \
+            .select("id, title") \
+            .eq("user_id", user.id) \
+            .execute()
+        return chats.data
+    
+    except:
+        print("No user logged in")
+        return {"error": "No user logged in"}
+
 @app.post("/chat")
 def chat(item: PromptItem):
     try:
@@ -93,7 +113,7 @@ def chat(item: PromptItem):
         chat: APIResponse
         if not user:
             logger.info("Guest Mode active")
-            user = get_temp_user()
+            user = create_temp_user().user
         else: 
             user = user.user
 
@@ -119,11 +139,11 @@ def chat(item: PromptItem):
                 .execute()
                 
         # Load messages for context and add the prompt to the db
-        messages = get_chat_messages(supabase, item.chatId)
+        messages = get_chat_messages(item.chatId)
         messages.data.sort(key=lambda m: m.get("created_at"))
 
         # Use normal function if debugging is needed
         # return send_chat_prompt(item, user, messages)
-        return StreamingResponse(send_chat_prompt(supabase, item, user, messages), media_type="text/event-stream")
+        return StreamingResponse(send_chat_prompt(item, user, messages), media_type="text/event-stream")
     except Exception as e:
         return {"error": e}
