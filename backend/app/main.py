@@ -1,12 +1,13 @@
 from fastapi import FastAPI
+from fastapi import HTTPException
 from fastapi.requests import Request
 from fastapi.responses import StreamingResponse
 from postgrest.base_request_builder import APIResponse
 from openai import OpenAI
 from app.models import LoginItem, PromptItem
 from app.auth.supabase_client import supabase
-from app.auth.functions import create_temp_user
-from app.chat.functions import get_chat_messages, send_chat_prompt
+from app.auth.functions import get_temp_user
+from app.chat.functions import get_chat_messages, send_chat_prompt, generate_chat_title
 import uuid
 import requests
 import dotenv
@@ -14,7 +15,7 @@ import os
 import gotrue
 import logging
 
-
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 DEBUG = True
 
@@ -23,8 +24,8 @@ app = FastAPI()
 dotenv.load_dotenv()
 
 client = OpenAI(
-  base_url="https://openrouter.ai/api/v1",
-  api_key=os.getenv("OPENAI_API_KEY"),
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENAI_API_KEY"),
 )
 
 supabase = supabase
@@ -132,12 +133,13 @@ def chat(item: PromptItem):
         # If not we need to create it
         if item.chatId == None or len(chat.data) != 1:
             item.chatId = str(uuid.uuid4())
-
             # Probably should have the new chat name auto change after the initial prompting
             supabase.table("chats") \
                 .insert({"id": item.chatId, "user_id": user.id, "title": "New Chat"}) \
                 .execute()
                 
+            title = generate_chat_title(client, item.prompt)
+            supabase.table("chats").update({"title": title}).eq("id", item.chatId).execute()
         # Load messages for context and add the prompt to the db
         messages = get_chat_messages(item.chatId)
         messages.data.sort(key=lambda m: m.get("created_at"))
@@ -147,3 +149,19 @@ def chat(item: PromptItem):
         return StreamingResponse(send_chat_prompt(item, user, messages), media_type="text/event-stream")
     except Exception as e:
         return {"error": e}
+    
+@app.get("/chat/{chat_id}/title")
+def get_chat_title(chat_id: str):
+    # Query Supabase for just the title field
+    resp = supabase.table("chats") \
+        .select("title") \
+        .eq("id", chat_id) \
+        .single() \
+        .execute()
+
+    data = getattr(resp, "data", None)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    # resp.data looks like {"title": "Your Generated Title"}
+    return {"chatId": chat_id, "title": resp.data["title"]}
