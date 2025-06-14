@@ -2,7 +2,7 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { IoCopyOutline, IoCheckmark } from 'react-icons/io5';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import styles from './ChatBody.module.css';
 
 interface Message {
@@ -81,7 +81,7 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeProps) =
           ) : (
             <IoCopyOutline size={14} />
           )}
-        </button>
+        </button> 
       </div>
     </div>
   );
@@ -111,10 +111,22 @@ export default function ChatBody({ messages }: { messages: Message[] }) {
                   <ReactMarkdown
                     components={{
                       code: CodeBlock,
+                      pre: ({ children }) => <>{children}</>,
                       h1: ({ children }) => <h1 className="text-2xl font-bold mb-4 mt-6 first:mt-0 text-white">{children}</h1>,
                       h2: ({ children }) => <h2 className="text-xl font-semibold mb-3 mt-5 first:mt-0 text-white">{children}</h2>,
                       h3: ({ children }) => <h3 className="text-lg font-semibold mb-2 mt-4 first:mt-0 text-white">{children}</h3>,
-                      p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed text-white">{children}</p>,
+                      p: ({ children, node }) => {  
+                        const hasOnlyCodeBlock = node?.children?.length === 1 && 
+                          node.children[0]?.type === 'element' && 
+                          node.children[0]?.tagName === 'code' && 
+                          node.children[0]?.properties?.className?.[0]?.startsWith('language-');
+                        
+                        if (hasOnlyCodeBlock) {
+                          return <>{children}</>;
+                        }
+                        
+                        return <p className="mb-3 last:mb-0 leading-relaxed text-white">{children}</p>;
+                      },
                       ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1 text-white">{children}</ul>,
                       ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1 text-white">{children}</ol>,
                       li: ({ children }) => <li className="text-white">{children}</li>,
