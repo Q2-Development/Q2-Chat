@@ -1,13 +1,13 @@
-from fastapi import FastAPI
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.requests import Request
 from fastapi.responses import StreamingResponse
 from postgrest.base_request_builder import APIResponse
 from openai import OpenAI
 from app.models import LoginItem, PromptItem
 from app.auth.supabase_client import supabase
-from app.auth.functions import get_temp_user
-from app.chat.functions import get_chat_messages, send_chat_prompt, generate_chat_title
+from app.auth.functions import create_temp_user
+from app.chat.functions import get_chat_messages, send_chat_prompt, generate_chat_title, send_file_prompt, send_file_prompt_bytes
+import base64
 import uuid
 import requests
 import dotenv
@@ -75,6 +75,10 @@ def get_login_status():
 def get_logout():
     supabase.auth.sign_out()
     return True
+
+def encode_file_to_base64(upload_file: UploadFile) -> str:
+    file_content = upload_file.file.read()
+    return base64.b64encode(file_content).decode('utf-8')
 
 # Send chat info
 
@@ -149,7 +153,48 @@ def chat(item: PromptItem):
         return StreamingResponse(send_chat_prompt(item, user, messages), media_type="text/event-stream")
     except Exception as e:
         return {"error": e}
-    
+
+@app.post("/chat/upload")
+async def chat_with_file(
+    model:  str           = Form(...),
+    chatId: str | None    = Form(None),
+    prompt: str           = Form(""),
+    file:   UploadFile    = File(...)
+):
+    # 1) Identify or create user
+    user_resp = supabase.auth.get_user()
+    if not user_resp:
+        logging.info("Guest Mode active")
+        user = create_temp_user().user
+    else:
+        user = user_resp.user
+
+    # 2) Create chat if missing
+    if not chatId:
+        chatId = str(uuid.uuid4())
+        supabase.table("chats").insert({
+            "id":      chatId,
+            "user_id": user.id,
+            "title":   "New Chat"
+        }).execute()
+
+    # 3) Read the file bytes *once*
+    file_bytes = await file.read()
+    content_type = file.content_type
+
+    # 4) Build your PromptItem
+    item = PromptItem(model=model, chatId=chatId, prompt=prompt)
+
+    # 5) Stream out
+    try:
+        return StreamingResponse(
+            send_file_prompt_bytes(item, file_bytes, content_type),
+            media_type="text/event-stream"
+        )
+    except Exception as e:
+        logger.error("Error in /chat/upload:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/chat/{chat_id}/title")
 def get_chat_title(chat_id: str):
     # Query Supabase for just the title field
