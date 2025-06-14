@@ -84,7 +84,13 @@ def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIRes
             except json.JSONDecodeError:
                 continue
 
-def generate_chat_title(llm: OpenAI, prompt: str) -> str:
+def generate_chat_title(prompt: str) -> str:
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f'Bearer {os.getenv("OPEN_ROUTER_KEY")}',
+        "Content-Type": "application/json"
+    }
+    
     system = (
         "You are an assistant that creates concise chat titles. "
         "When given the user's very first message, you should: "
@@ -93,15 +99,23 @@ def generate_chat_title(llm: OpenAI, prompt: str) -> str:
         "3) Omit filler words, punctuation, and quotes. "
         "4) Ensure the title clearly reflects the user's goal."
     )
-    response = llm.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user",   "content": prompt},
-        ],
-        max_tokens=5,
-        temperature=0.2,
-    )
     
-    raw = response.choices[0].message.content or "Untitled Chat"
-    return raw.strip().strip('"')
+    payload = {
+        "model": "gpt-4",  # Using GPT-4 for better title generation
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt}
+        ],
+        "max_tokens": 5,
+        "temperature": 0.2
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        raw = data["choices"][0]["message"]["content"] or "Untitled Chat"
+        return raw.strip().strip('"')
+    except Exception as e:
+        logger.error(f"Error generating chat title: {str(e)}")
+        return "Untitled Chat"

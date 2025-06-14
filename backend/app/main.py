@@ -1,13 +1,12 @@
-from fastapi import FastAPI
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.requests import Request
 from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from postgrest.base_request_builder import APIResponse
-from openai import OpenAI
-from app.models import LoginItem, PromptItem
-from app.auth.supabase_client import supabase
-from app.auth.functions import get_temp_user
-from app.chat.functions import get_chat_messages, send_chat_prompt, generate_chat_title
+from app import (
+    LoginItem, PromptItem, supabase, get_temp_user,
+    get_chat_messages, send_chat_prompt, generate_chat_title
+)
 import uuid
 import requests
 import dotenv
@@ -29,13 +28,6 @@ app.add_middleware(
 )
 
 dotenv.load_dotenv()
-
-client = OpenAI(
-  base_url="https://openrouter.ai/api/v1",
-  api_key=os.getenv("OPEN_ROUTER_KEY"),  
-)
-
-supabase = supabase
 
 @app.get("/")
 def read_root():
@@ -147,7 +139,7 @@ def chat(item: PromptItem):
                 .insert({"id": item.chatId, "user_id": user.id, "title": "New Chat"}) \
                 .execute()
                 
-            title = generate_chat_title(client, item.prompt)
+            title = generate_chat_title(item.prompt)
             supabase.table("chats").update({"title": title}).eq("id", item.chatId).execute()
         # Load messages for context and add the prompt to the db
         messages = get_chat_messages(item.chatId)
