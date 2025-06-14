@@ -1,6 +1,8 @@
-from postgrest.base_request_builder import APIResponse
+from openai import OpenAI
 from app.models import PromptItem
 from app.auth.supabase_client import supabase
+from postgrest.base_request_builder import APIResponse
+
 import requests
 import json
 import os
@@ -76,3 +78,25 @@ def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIRes
                     yield content
             except json.JSONDecodeError:
                 continue
+
+def generate_chat_title(llm: OpenAI, prompt: str) -> str:
+    system = (
+        "You are an assistant that creates concise chat titles. "
+        "When given the user's very first message, you should: "
+        "1) Summarize the core topic or intent in exactly 3-5 words. "
+        "2) Capitalize each significant word (Title Case). "
+        "3) Omit filler words, punctuation, and quotes. "
+        "4) Ensure the title clearly reflects the user's goal."
+    )
+    response = llm.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user",   "content": prompt},
+        ],
+        max_tokens=5,
+        temperature=0.2,
+    )
+    
+    raw = response.choices[0].message.content or "Untitled Chat"
+    return raw.strip().strip('"')
