@@ -101,7 +101,7 @@ def generate_chat_title(prompt: str) -> str:
     )
     
     payload = {
-        "model": "gpt-4",  # Using GPT-4 for better title generation
+        "model": "gpt-4", 
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": prompt}
