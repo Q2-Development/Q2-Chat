@@ -15,17 +15,24 @@ import os
 import gotrue
 import logging
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 DEBUG = True
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 dotenv.load_dotenv()
 
 client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENAI_API_KEY"),
+  base_url="https://openrouter.ai/api/v1",
+  api_key=os.getenv("OPEN_ROUTER_KEY"),  
 )
 
 supabase = supabase
@@ -76,13 +83,15 @@ def get_logout():
     supabase.auth.sign_out()
     return True
 
-# Send chat info
-
 @app.get("/models")
 def get_models():
-    r = requests.get("https://openrouter.ai/api/v1/models")
+    headers = {
+        "Authorization": f'Bearer {os.getenv("OPEN_ROUTER_KEY")}',  # Changed to use OPEN_ROUTER_KEY
+        "Content-Type": "application/json"
+    }
+    r = requests.get("https://openrouter.ai/api/v1/models", headers=headers)
     if r.status_code >= 200 and r.status_code <= 299:
-        return r.text
+        return r.json()  
     else:
         return {"error": "Failed to retrieve models"}
 
@@ -148,7 +157,7 @@ def chat(item: PromptItem):
         # return send_chat_prompt(item, user, messages)
         return StreamingResponse(send_chat_prompt(item, user, messages), media_type="text/event-stream")
     except Exception as e:
-        return {"error": e}
+        return {"error": str(e)}
     
 @app.get("/chat/{chat_id}/title")
 def get_chat_title(chat_id: str):
