@@ -87,7 +87,7 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeProps) =
   );
 };
 
-export default function ChatBody({ messages }: { messages: Message[] }) {
+export const ChatBody = ({ messages }: { messages: Message[] }) => {
   console.log(messages);
   return (
     <div className="wrapper flex overflow-y-auto justify-center py-8 grow">
