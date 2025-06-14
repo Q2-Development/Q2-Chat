@@ -103,85 +103,14 @@ def generate_chat_title(llm: OpenAI, prompt: str) -> str:
     raw = response.choices[0].message.content or "Untitled Chat"
     return raw.strip().strip('"')
 
-def encode_file_to_base64(upload_file: UploadFile) -> str:
-    content = upload_file.file.read()
-    return base64.b64encode(content).decode("utf-8")
-
-def send_file_prompt(item: PromptItem, file: UploadFile):
+def stream_multimodal(item: PromptItem, file_field: dict):
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}",
-        "Content-Type": "application/json"
+        "Content-Type":  "application/json"
     }
 
-    # 1. Encode & build messages
-    b64 = encode_file_to_base64(file)
-    data_url = f"data:{file.content_type};base64,{b64}"
-    messages_payload = [
-        {"role": "user", "content": item.prompt},
-        {"role": "user", "content": {"type": "image_url", "image_url": {"url": data_url}}}
-    ]
-
-    # 2. Insert the user prompt into Supabase
-    supabase.table("messages").insert({
-        "chat_id":    item.chatId,
-        "provider_id": item.model,
-        "content":     item.prompt,
-        "speaker":    "User"
-    }).execute()
-
-    # 3. Prepare the streaming payload
-    payload = {
-        "model":   item.model,
-        "messages":[*messages_payload],
-        "stream": True
-    }
-
-    # 4. Stream the LLM response back
-    response_text = []
-    with requests.post(url, headers=headers, json=payload, stream=True) as r:
-        r.raise_for_status()
-        for line in r.iter_lines(decode_unicode=True):
-            if not line or not line.startswith("data: "):
-                continue
-            data = line[len("data: "):]
-            if data == "[DONE]":
-                break
-            try:
-                data_obj = json.loads(data)
-                delta = data_obj["choices"][0]["delta"]
-                content = delta.get("content")
-                if content:
-                    response_text.append(content)
-                    yield content
-            except json.JSONDecodeError:
-                continue
-
-    # 5. Save assistant’s final reply
-    full_reply = "".join(response_text)
-    supabase.table("messages").insert({
-        "chat_id":    item.chatId,
-        "provider_id": item.model,
-        "content":     full_reply,
-        "speaker":    "Assistant"
-    }).execute()
-
-def send_file_prompt_bytes(item: PromptItem, file_bytes: bytes, content_type: str):
-    """
-    Streams a file+text prompt to OpenRouter and writes to Supabase,
-    taking raw file bytes (so we never re-read a closed UploadFile).
-    """
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}",
-        "Content-Type": "application/json"
-    }
-
-    # 1) Base64‐encode
-    b64 = base64.b64encode(file_bytes).decode("utf-8")
-    data_url = f"data:{content_type};base64,{b64}"
-
-    # 2) Insert user’s text prompt into Supabase
+    # 1) record user prompt
     supabase.table("messages").insert({
         "chat_id":     item.chatId,
         "provider_id": item.model,
@@ -189,41 +118,60 @@ def send_file_prompt_bytes(item: PromptItem, file_bytes: bytes, content_type: st
         "speaker":     "User"
     }).execute()
 
-    # 3) Build streaming payload
-    multimodal_message = {
-        "role": "user",
+    # 2) build payload
+    multimodal = {
+        "role":    "user",
         "content": [
             {"type": "text",      "text": item.prompt},
-            {"type": "image_url", "image_url": {"url": data_url}}
+            file_field
         ]
     }
-    payload = {
-        "model":   item.model,
-        "messages":[ multimodal_message ],
-        "stream":  True
-    }
+    payload = {"model": item.model, "messages": [multimodal], "stream": True}
 
-    # 4) Stream the LLM response
-    response_text = []
+    # 3) stream the response
+    buffer = []
     with requests.post(url, headers=headers, json=payload, stream=True) as r:
         r.raise_for_status()
         for line in r.iter_lines(decode_unicode=True):
-            if not line or not line.startswith("data: "):
+            if not line.startswith("data: "):
                 continue
             chunk = line[len("data: "):]
             if chunk == "[DONE]":
                 break
-            data = json.loads(chunk)
-            delta = data["choices"][0]["delta"].get("content")
-            if delta:
-                response_text.append(delta)
-                yield delta
+            try:
+                delta = json.loads(chunk)["choices"][0]["delta"].get("content")
+                if delta:
+                    buffer.append(delta)
+                    yield delta
+            except Exception:
+                continue
 
-    # 5) Save the assistant’s final reply
-    full = "".join(response_text)
+    # 4) record assistant reply
+    full = "".join(buffer)
     supabase.table("messages").insert({
         "chat_id":     item.chatId,
         "provider_id": item.model,
         "content":     full,
         "speaker":     "Assistant"
     }).execute()
+
+
+def send_image_prompt(item: PromptItem, file_bytes: bytes, content_type: str):
+    b64 = base64.b64encode(file_bytes).decode("utf-8")
+    data_url = f"data:{content_type};base64,{b64}"
+    file_field = {"type": "image_url", "image_url": {"url": data_url}}
+    # simply return the generator
+    return stream_multimodal(item, file_field)
+
+
+def send_pdf_prompt(item: PromptItem, file_bytes: bytes, content_type: str):
+    b64 = base64.b64encode(file_bytes).decode("utf-8")
+    data_url = f"data:{content_type};base64,{b64}"
+    file_field = {
+        "type": "file",
+        "file": {
+            "filename": getattr(item, "filename", "upload.pdf"),
+            "file_data": data_url
+        }
+    }
+    return stream_multimodal(item, file_field)

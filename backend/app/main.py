@@ -6,7 +6,7 @@ from openai import OpenAI
 from app.models import LoginItem, PromptItem
 from app.auth.supabase_client import supabase
 from app.auth.functions import create_temp_user
-from app.chat.functions import get_chat_messages, send_chat_prompt, generate_chat_title, send_file_prompt, send_file_prompt_bytes
+from app.chat.functions import get_chat_messages, send_chat_prompt, generate_chat_title, send_image_prompt, send_pdf_prompt
 import base64
 import uuid
 import requests
@@ -76,9 +76,24 @@ def get_logout():
     supabase.auth.sign_out()
     return True
 
-def encode_file_to_base64(upload_file: UploadFile) -> str:
-    file_content = upload_file.file.read()
-    return base64.b64encode(file_content).decode('utf-8')
+def get_user_and_chat(chatId: str | None):
+    """Determine user (or guest) and ensure chatId exists."""
+    user_resp = supabase.auth.get_user()
+    if not user_resp:
+        logger.info("Guest Mode active")
+        user = create_temp_user().user
+    else:
+        user = user_resp.user
+
+    if not chatId:
+        chatId = str(uuid.uuid4())
+        supabase.table("chats").insert({
+            "id":      chatId,
+            "user_id": user.id,
+            "title":   "New Chat"
+        }).execute()
+
+    return user, chatId
 
 # Send chat info
 
@@ -154,45 +169,59 @@ def chat(item: PromptItem):
     except Exception as e:
         return {"error": e}
 
-@app.post("/chat/upload")
-async def chat_with_file(
-    model:  str           = Form(...),
-    chatId: str | None    = Form(None),
-    prompt: str           = Form(""),
-    file:   UploadFile    = File(...)
+@app.post("/chat/upload/image")
+async def chat_upload_image(
+    model:     str           = Form(...),
+    chatId:    str | None    = Form(None),
+    prompt:    str           = Form(""),
+    file:      UploadFile    = File(...)
 ):
-    # 1) Identify or create user
-    user_resp = supabase.auth.get_user()
-    if not user_resp:
-        logging.info("Guest Mode active")
-        user = create_temp_user().user
-    else:
-        user = user_resp.user
+    # 1) Lookup or create user + chat
+    user, chatId = get_user_and_chat(chatId)
 
-    # 2) Create chat if missing
-    if not chatId:
-        chatId = str(uuid.uuid4())
-        supabase.table("chats").insert({
-            "id":      chatId,
-            "user_id": user.id,
-            "title":   "New Chat"
-        }).execute()
+    # 2) Read file bytes once
+    file_bytes    = await file.read()
+    content_type  = file.content_type
 
-    # 3) Read the file bytes *once*
-    file_bytes = await file.read()
-    content_type = file.content_type
-
-    # 4) Build your PromptItem
+    # 3) Build PromptItem
     item = PromptItem(model=model, chatId=chatId, prompt=prompt)
 
-    # 5) Stream out
+    # 4) Stream via the image helper
     try:
         return StreamingResponse(
-            send_file_prompt_bytes(item, file_bytes, content_type),
+            send_image_prompt(item, file_bytes, content_type),
             media_type="text/event-stream"
         )
     except Exception as e:
-        logger.error("Error in /chat/upload:", e)
+        logger.error("Error in /chat/upload/image:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/chat/upload/pdf")
+async def chat_upload_pdf(
+    model:     str           = Form(...),
+    chatId:    str | None    = Form(None),
+    prompt:    str           = Form(""),
+    file:      UploadFile    = File(...)
+):
+    # 1) Lookup or create user + chat
+    user, chatId = get_user_and_chat(chatId)
+
+    # 2) Read file bytes once
+    file_bytes    = await file.read()
+    content_type  = file.content_type
+
+    # 3) Build PromptItem
+    item = PromptItem(model=model, chatId=chatId, prompt=prompt)
+
+    # 4) Stream via the PDF helper
+    try:
+        return StreamingResponse(
+            send_pdf_prompt(item, file_bytes, content_type),
+            media_type="text/event-stream"
+        )
+    except Exception as e:
+        logger.error("Error in /chat/upload/pdf:", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/chat/{chat_id}/title")
