@@ -41,7 +41,6 @@ const CodeBlock = ({ className, children, ...props }: CodeProps) => {
       <SyntaxHighlighter
         style={vscDarkPlus}
         language={language}
-        PreTag="span"
         customStyle={{display: 'inline-flex', padding: '0.25rem 0.5rem'}}
         className={`${styles.syntaxhighlighter} rounded-lg !bg-neutral-800 overflow-x-auto`}
         {...props}
@@ -131,8 +130,8 @@ export const ChatBody = ({ messages }: { messages: Message[] }) => {
                         
                         return <p className="mb-3 last:mb-0 leading-relaxed text-white">{children}</p>;
                       },
-                      ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1 text-white">{children}</ul>,
-                      ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1 text-white">{children}</ol>,
+                      ul: ({ children }) => <ul className="list-disc mb-3 space-y-1 text-white">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal mb-3 space-y-1 text-white">{children}</ol>,
                       li: ({ children }) => <li className="text-white">{children}</li>,
                       blockquote: ({ children }) => (
                         <blockquote className="border-l-4 border-neutral-600 pl-4 italic mb-3 text-neutral-300">
