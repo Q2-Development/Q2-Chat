@@ -1,9 +1,9 @@
 "use client";
 
-import ChatTabs from "@/components/ChatTabs";
-import SidebarTabs from "@/components/SidebarTabs";
-import ChatBody from "@/components/ChatBody";
-import ChatInput from "@/components/ChatInput";
+import { ChatInput } from "@/components/chat-input";
+import { ChatTabs } from "@/components/chat-tabs";
+import { SidebarTabs } from "@/components/sidebar-tabs";
+import { ChatBody } from "@/components/chat-body";
 import { useChatStore } from "@/store/chatStore";
 import { Chat } from "@/types/chat";
 
@@ -16,6 +16,7 @@ export default function ChatPage() {
     setActiveChatId,
     handleInputChange,
     handleSendMessage,
+    handleModelChange,
     addNewChat,
     closeChat,
     moveFromSidebar,
@@ -48,8 +49,10 @@ export default function ChatPage() {
 
         <ChatInput
           inputValue={activeChat.input}
+          selectedModel={activeChat.model}
           onInputChange={handleInputChange}
           onSend={handleSendMessage}
+          onModelChange={handleModelChange}
         />
       </div>
     </div>

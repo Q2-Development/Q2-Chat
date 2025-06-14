@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 
 class LoginItem(BaseModel):
@@ -5,5 +6,6 @@ class LoginItem(BaseModel):
     password: str
 
 class PromptItem(BaseModel):
+    chatId: Optional[str] = None
     model: str
     prompt: str

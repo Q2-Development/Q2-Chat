@@ -1,0 +1,25 @@
+.syntaxhighlighter {
+    background-color: #262626;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin: 0.5rem 0;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    background-color: #262626;
+}
+
+.syntaxhighlighter pre {
+    background-color: #262626;
+}
+
+.syntaxhighlighter + div button {
+    transition: all 0.2s ease-in-out;
+}
+
+.syntaxhighlighter + div button:hover {
+    transform: scale(1.05);
+}
+
+.wrapper {
+    scroll-behavior: smooth;
+}

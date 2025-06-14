@@ -2,12 +2,50 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
   try {
-    const { message } = await request.json();
+    const { message, model = "openai/gpt-3.5-turbo" } = await request.json();
 
-    // TODO: We need to replace this with the actual backend URL
-    const reply = `I received your message: "${message}". This is a mock response.`;
+    const backendResponse = await fetch(`${process.env.FASTAPI_URL || 'http://localhost:8000'}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model,
+        prompt: message
+      })
+    });
 
-    return NextResponse.json({ reply });
+    if (!backendResponse.ok) {
+      throw new Error(`Backend responded with status: ${backendResponse.status}`);
+    }
+
+    const stream = new ReadableStream({
+      start(controller) {
+        const reader = backendResponse.body?.getReader();
+        
+        function pump(): Promise<void> {
+          return reader!.read().then(({ done, value }) => {
+            if (done) {
+              controller.close();
+              return;
+            }
+            controller.enqueue(value);
+            return pump();
+          });
+        }
+        
+        return pump();
+      }
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      }
+    });
+
   } catch (error) {
     console.error('Error processing chat message:', error);
     return NextResponse.json(
@@ -15,4 +53,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-} 
+}

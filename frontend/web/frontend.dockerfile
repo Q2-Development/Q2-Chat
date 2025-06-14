@@ -6,4 +6,4 @@ COPY . .
 
 RUN npm i
 
-CMD ["npm", "run", "web"]
+CMD ["npm", "run", "dev"]

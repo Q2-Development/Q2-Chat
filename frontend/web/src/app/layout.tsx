@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Q2Chat",
+  title: "Q2 Chat",
   description: "Q2Chat is a UI that lets you use any model on one platform.",
 };
 
