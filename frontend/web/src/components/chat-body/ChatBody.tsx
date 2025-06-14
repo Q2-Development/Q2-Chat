@@ -20,7 +20,7 @@ interface CodeProps {
   children?: React.ReactNode;
 }
 
-const CodeBlock = ({ node, inline, className, children, ...props }: CodeProps) => {
+const CodeBlock = ({ className, children, ...props }: CodeProps) => {
   const [copied, setCopied] = useState(false);
   const match = /language-(\w+)/.exec(className || '');
   const language = match ? match[1] : 'text';
@@ -36,14 +36,18 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeProps) =
     }
   };
 
-  if (inline) {
+  if (!codeString.includes("\n")) {
     return (
-      <code
-        className="bg-neutral-700 text-red-300 px-1.5 py-0.5 rounded text-sm font-mono"
+      <SyntaxHighlighter
+        style={vscDarkPlus}
+        language={language}
+        PreTag="span"
+        customStyle={{display: 'inline-flex', padding: '0.25rem 0.5rem'}}
+        className={`${styles.syntaxhighlighter} rounded-lg !bg-neutral-800 overflow-x-auto`}
         {...props}
       >
-        {children}
-      </code>
+        {codeString}
+      </SyntaxHighlighter>
     );
   }
 
