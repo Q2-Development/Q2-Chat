@@ -130,8 +130,11 @@ def chat(item: PromptItem):
         # Make sure the chat actually exists
         # If not we need to create it
         if item.chatId == None or len(chat.data) != 1:
-            item.chatId = str(uuid.uuid4())
-            # Probably should have the new chat name auto change after the initial prompting
+            # If no chatId provided, generate one, otherwise use the provided one
+            if item.chatId is None:
+                item.chatId = str(uuid.uuid4())
+            
+            # Create the chat with the provided or generated ID
             supabase.table("chats") \
                 .insert({"id": item.chatId, "user_id": user.id, "title": "New Chat"}) \
                 .execute()

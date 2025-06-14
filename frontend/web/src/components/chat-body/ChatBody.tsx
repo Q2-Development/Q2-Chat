@@ -116,12 +116,25 @@ export const ChatBody = ({ messages }: { messages: Message[] }) => {
                       h2: ({ children }) => <h2 className="text-xl font-semibold mb-3 mt-5 first:mt-0 text-white">{children}</h2>,
                       h3: ({ children }) => <h3 className="text-lg font-semibold mb-2 mt-4 first:mt-0 text-white">{children}</h3>,
                       p: ({ children, node }) => {  
+                        // Check if this paragraph contains only a code block
                         const hasOnlyCodeBlock = node?.children?.length === 1 && 
                           node.children[0]?.type === 'element' && 
-                          node.children[0]?.tagName === 'code' && 
-                          node.children[0]?.properties?.className?.[0]?.startsWith('language-');
+                          node.children[0]?.tagName === 'code';
                         
-                        if (hasOnlyCodeBlock) {
+                        // Also check if the code block has a language class (block-level code)
+                        const isBlockLevelCode = hasOnlyCodeBlock && 
+                          node.children[0]?.properties?.className?.some((cls: string) => 
+                            cls.startsWith('language-')
+                          );
+                        
+                        // Check if paragraph contains any block-level elements that shouldn't be in p
+                        const hasBlockElements = node?.children?.some((child: any) => 
+                          child?.type === 'element' && 
+                          ['div', 'pre', 'blockquote', 'table', 'ul', 'ol', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(child.tagName)
+                        );
+                        
+                        // If it's a block-level code block or contains block elements, don't wrap in p element
+                        if (isBlockLevelCode || hasBlockElements) {
                           return <>{children}</>;
                         }
                         
