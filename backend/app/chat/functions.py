@@ -1,5 +1,6 @@
 from postgrest.base_request_builder import APIResponse
 from app.models import PromptItem
+from .prompts import SYSTEM_PROMPT
 from app.auth.supabase_client import supabase
 from postgrest.base_request_builder import APIResponse
 
@@ -10,9 +11,6 @@ import gotrue
 import logging
 
 logger = logging.getLogger(__name__)
-
-SYSTEM_PROMPT = "You are QT'Pi, an AI assistant operating on Q2 Chat - a unified platform that gives users access to multiple AI models in one convenient interface. You're helpful, knowledgeable, and adaptable to different conversation styles and needs. When appropriate, you can mention that users can experiment with different AI models on this platform to find the one that works best for their specific task, whether they need creative writing, technical analysis, coding help, or general conversation. Always strive to be accurate, helpful, and engaging while respecting user preferences and maintaining a professional yet friendly tone."
-
 
 def get_chat_messages(chatId:str):
     return supabase.table("messages") \
@@ -94,7 +92,7 @@ def generate_chat_title(prompt: str) -> str:
     system = (
         "You are an assistant that creates concise chat titles. "
         "When given the user's very first message, you should: "
-        "1) Summarize the core topic or intent in exactly 3-5 words. "
+        "1) Summarize the core topic or intent in exactly 1-3 words. "
         "2) Capitalize each significant word (Title Case). "
         "3) Omit filler words, punctuation, and quotes. "
         "4) Ensure the title clearly reflects the user's goal."

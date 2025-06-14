@@ -1,6 +1,15 @@
 import { create } from 'zustand';
 import { Chat, Message, MAX_VISIBLE_TABS } from '@/types/chat';
 
+// Simple UUID generator for frontend use
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 interface ChatState {
   chats: Chat[];
   visibleTabIds: string[];
@@ -13,19 +22,22 @@ interface ChatState {
   addNewChat: () => void;
   closeChat: (chatId: string) => void;
   moveFromSidebar: (chatId: string) => void;
+  updateChatTitle: (chatId: string, title: string) => void;
 }
+
+const initialChatId = generateUUID();
 
 export const useChatStore = create<ChatState>((set, get) => ({
   chats: [{ 
-    id: "1", 
+    id: initialChatId, 
     title: "New Chat", 
     messages: [], 
     input: "",
     model: "openai/gpt-3.5-turbo"
   }],
-  visibleTabIds: ["1"],
+  visibleTabIds: [initialChatId],
   sidebarTabIds: [],
-  activeChatId: "1",
+  activeChatId: initialChatId,
 
   setActiveChatId: (id: string) => set({ activeChatId: id }),
 
@@ -47,10 +59,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
+  updateChatTitle: (chatId: string, title: string) => {
+    set({
+      chats: get().chats.map((chat) =>
+        chat.id === chatId ? { ...chat, title } : chat
+      ),
+    });
+  },
+
   handleSendMessage: async () => {
     const { activeChatId, chats } = get();
     const activeChat = chats.find((c) => c.id === activeChatId);
     if (!activeChat?.input.trim()) return;
+
+    // Check if this is the first message in the chat
+    const isFirstMessage = activeChat.messages.length === 0;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -90,7 +113,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           message: userMessage.text,
-          model: activeChat.model 
+          model: activeChat.model,
+          chatId: activeChatId
         }),
       });
 
@@ -143,6 +167,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ),
       });
 
+      // If this was the first message, fetch the generated title from the backend
+      if (isFirstMessage) {
+        try {
+          const titleResponse = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'}/chat/${activeChatId}/title`);
+          if (titleResponse.ok) {
+            const titleData = await titleResponse.json();
+            get().updateChatTitle(activeChatId, titleData.title);
+          }
+        } catch (error) {
+          console.error('Failed to fetch chat title:', error);
+        }
+      }
+
     } catch (error) {
       console.error('Failed to send message:', error);
       
@@ -170,7 +207,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   addNewChat: () => {
     const { chats, visibleTabIds, sidebarTabIds } = get();
     const newChat: Chat = {
-      id: Date.now().toString(),
+      id: generateUUID(),
       title: "New Chat",
       messages: [],
       input: "",
