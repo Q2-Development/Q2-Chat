@@ -1,0 +1,68 @@
+.tabsContainer {
+    display: flex;
+    background-color: #262626; /* neutral-800 */
+    padding: 0.75rem 1rem 0 1rem;
+    border-bottom: 3px solid #404040; /* neutral-700 */
+    max-width: 100%;
+}
+
+.tab {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-top-left-radius: 0.5rem;
+    border-top-right-radius: 0.5rem;
+    font-size: 0.875rem;
+    transition: background-color 150ms;
+    width: 16rem; /* w-3xs is not a standard tailwind class, assuming a fixed width */
+    min-width: 10rem; /* min-w-xs is not a standard tailwind class, assuming a fixed width */
+    cursor: pointer;
+}
+
+.tabActive {
+    background-color: #404040; /* neutral-700 */
+    font-weight: 600;
+}
+
+.tabInactive {
+    background-color: #262626; /* neutral-800 */
+}
+
+.tabInactive:hover {
+    background-color: rgba(64, 64, 64, 0.5); /* neutral-700/50 */
+}
+
+.closeButton {
+    display: flex;
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: white;
+    cursor: pointer;
+}
+
+.separator {
+    width: 1px;
+    background-color: #737373; /* neutral-500 */
+    height: 65%;
+    align-self: center;
+    margin-top: 0.25rem;
+}
+
+.addButton {
+    background-color: transparent;
+    border: none;
+    color: white;
+    padding: 0.25rem;
+    border-radius: 0.375rem;
+    align-self: center;
+    margin-left: 0.25rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.addButton:hover {
+    background-color: #404040; /* neutral-700 */
+} 

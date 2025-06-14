@@ -4,7 +4,7 @@ import styles from "./ChatInput.module.css";
 import { AVAILABLE_MODELS } from "@/types/chat";
 import { useState } from "react";
 
-interface Props {
+interface ChatInputProps {
     inputValue: string;
     selectedModel: string;
     onInputChange: (text: string) => void;
@@ -12,15 +12,15 @@ interface Props {
     onSend: () => void;
 }
 
-export default function ChatInput({ inputValue, selectedModel, onInputChange, onSend, onModelChange }: Props) {
+export const ChatInput = ({ inputValue, selectedModel, onInputChange, onSend, onModelChange }: ChatInputProps) => {
     const [showModelDropdown, setShowModelDropdown] = useState(false);
     const selectedModelName = AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name || "GPT-3.5 Turbo";
 
     return (
-        <div className={`${styles.inputContainer} p-5 mb-7 max-w-[60%] rounded-3xl bg-neutral-800 container flex flex-col mt-auto self-center`}>
+        <div className={styles.inputContainer}>
             <textarea
                 name="prompt-input"
-                className="outline-0 resize-none"
+                className={styles.textarea}
                 id="prompt-input" 
                 rows={5} 
                 value={inputValue}
@@ -33,27 +33,27 @@ export default function ChatInput({ inputValue, selectedModel, onInputChange, on
                 }}
                 placeholder="Ask anything"
             />
-            <div className="input-menu-container mt-2.5 flex">
-                <div className="flex">
-                    <button className="p-2 min-w-10 min-h-10 flex justify-center items-center bg-neutral-700 rounded-3xl mr-2">
+            <div className={styles.inputMenuContainer}>
+                <div className={styles.leftMenu}>
+                    <button className={`${styles.button} ${styles.iconButton} ${styles.addButton}`}>
                         <IoAdd size={24} />
                     </button>
-                    <button className="py-2 px-3.5 min-w-10 min-h-10 flex justify-center items-center bg-neutral-700 rounded-3xl flex mr-auto">
+                    <button className={`${styles.button} ${styles.toolsButton}`}>
                         <IoOptionsOutline size={22} />
-                        <span className="ml-2 text-sm font-medium">Tools</span>
+                        <span>Tools</span>
                     </button>
                 </div>
-                <div className="relative mx-3">
+                <div className={styles.modelDropdownContainer}>
                     <button
                         onClick={() => setShowModelDropdown(!showModelDropdown)}
-                        className="py-2 px-3 flex items-center bg-neutral-700 rounded-lg hover:bg-neutral-600 transition-colors text-sm"
+                        className={`${styles.button} ${styles.modelDropdownButton}`}
                     >
-                        <span className="mr-2">{selectedModelName}</span>
-                        <IoChevronDown size={16} className={`transition-transform ${showModelDropdown ? 'rotate-180' : ''}`} />
+                        <span>{selectedModelName}</span>
+                        <IoChevronDown size={16} className={`${styles.modelDropdownIcon} ${showModelDropdown ? styles.modelDropdownIconOpen : ''}`} />
                     </button>
                     
                     {showModelDropdown && (
-                        <div className="absolute bottom-full mb-2 right-0 bg-neutral-700 rounded-lg shadow-lg border border-neutral-600 min-w-48 z-10">
+                        <div className={styles.modelDropdownMenu}>
                             {AVAILABLE_MODELS.map((model) => (
                                 <button
                                     key={model.id}
@@ -61,8 +61,8 @@ export default function ChatInput({ inputValue, selectedModel, onInputChange, on
                                         onModelChange(model.id);
                                         setShowModelDropdown(false);
                                     }}
-                                    className={`w-full text-left px-3 py-2 text-sm hover:bg-neutral-600 first:rounded-t-lg last:rounded-b-lg transition-colors ${
-                                        selectedModel === model.id ? 'bg-neutral-600 font-medium' : ''
+                                    className={`${styles.modelDropdownItem} ${
+                                        selectedModel === model.id ? styles.modelDropdownItemSelected : ''
                                     }`}
                                 >
                                     {model.name}
@@ -71,11 +71,11 @@ export default function ChatInput({ inputValue, selectedModel, onInputChange, on
                         </div>
                     )}
                 </div>
-                <div className="flex ml-auto">
-                    <button className="p-2 min-w-10 min-h-10 flex justify-center items-center bg-neutral-700 rounded-3xl mr-2">
+                <div className={styles.rightMenu}>
+                    <button className={`${styles.button} ${styles.iconButton} ${styles.micButton}`}>
                         <IoMic size={24} />
                     </button>
-                    <button className="p-2 min-w-10 min-h-10 flex justify-center items-center bg-neutral-700 rounded-3xl">
+                    <button onClick={onSend} className={`${styles.button} ${styles.iconButton}`}>
                         <FaArrowUp size={18} />
                     </button>
                 </div>
