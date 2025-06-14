@@ -1,6 +1,9 @@
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { IoCopyOutline, IoCheckmark } from 'react-icons/io5';
+import { useState } from 'react';
+import styles from './ChatBody.module.css';
 
 interface Message {
   id: string;
@@ -18,8 +21,20 @@ interface CodeProps {
 }
 
 const CodeBlock = ({ node, inline, className, children, ...props }: CodeProps) => {
+  const [copied, setCopied] = useState(false);
   const match = /language-(\w+)/.exec(className || '');
   const language = match ? match[1] : 'text';
+  const codeString = String(children).replace(/\n$/, '');
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(codeString);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  };
 
   if (inline) {
     return (
@@ -33,19 +48,12 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeProps) =
   }
 
   return (
-    <div className="relative">
+    <div className="relative group">
       <SyntaxHighlighter
         style={vscDarkPlus}
         language={language}
         PreTag="div"
-        className="rounded-lg !bg-neutral-800 !mt-2 !mb-2 overflow-x-auto"
-        customStyle={{
-          margin: '0.5rem 0',
-          padding: '1rem',
-          fontSize: '0.875rem',
-          lineHeight: '1.5',
-          backgroundColor: '#262626',
-        }}
+        className={`${styles.syntaxhighlighter} rounded-lg !bg-neutral-800 !mt-2 !mb-2 overflow-x-auto`}
         codeTagProps={{
           style: {
             fontSize: '0.875rem',
@@ -54,13 +62,27 @@ const CodeBlock = ({ node, inline, className, children, ...props }: CodeProps) =
         }}
         {...props}
       >
-        {String(children).replace(/\n$/, '')}
+        {codeString}
       </SyntaxHighlighter>
-      {language !== 'text' && (
-        <div className="absolute top-2 right-2 text-xs text-neutral-400 bg-neutral-700 px-2 py-1 rounded">
-          {language}
-        </div>
-      )}
+      
+      <div className="absolute top-2 right-2 flex items-center gap-2">
+        {language !== 'text' && (
+          <div className="text-xs text-neutral-400 bg-neutral-700 px-2 py-1 rounded">
+            {language}
+          </div>
+        )}
+        <button
+          onClick={copyToClipboard}
+          className="text-neutral-400 hover:text-white bg-neutral-700 hover:bg-neutral-600 p-1.5 rounded transition-colors group-hover:opacity-100"
+          title={copied ? 'Copied!' : 'Copy code'}
+        >
+          {copied ? (
+            <IoCheckmark size={14} className="text-green-400" />
+          ) : (
+            <IoCopyOutline size={14} />
+          )}
+        </button>
+      </div>
     </div>
   );
 };
