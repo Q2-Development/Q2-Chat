@@ -1,7 +1,5 @@
-# Guest Usage
+from app.auth.supabase_client import supabase
 
-# assign a cookie with random uuid on load in a jwt for guest user 
-# delete/get new one on refresh
-def get_temp_user():
-    raise NotImplementedError
-    return uuid
+def create_temp_user():
+    supabase.auth.sign_in_anonymously()
+    return supabase.auth.get_user()
