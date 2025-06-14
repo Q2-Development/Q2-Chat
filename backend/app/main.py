@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from postgrest.base_request_builder import APIResponse
 from app import (
     LoginItem, PromptItem, supabase, get_temp_user,
-    get_chat_messages, send_chat_prompt, generate_chat_title
+    get_chat_messages, send_chat_prompt, generate_chat_title, create_temp_user
 )
 import uuid
 import requests
