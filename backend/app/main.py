@@ -33,9 +33,6 @@ dotenv.load_dotenv()
 def read_root():
     return {"Hello": "World"}
 
-
-# Auth Functions
-
 @app.post("/signup")
 def post_signup(item: LoginItem):
     if (item.email == None or item.email == ""): return None
