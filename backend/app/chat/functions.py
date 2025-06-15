@@ -59,10 +59,15 @@ def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIRes
     # Stream the response back to the client
     response = []
     with requests.post(url, headers=headers, json=payload, stream=True) as r:
-        for line in r.iter_lines(decode_unicode=True):
-            if not line or not line.startswith("data: "):
+        for line in r.iter_lines():
+            if not line:
                 continue
-            data = line[len("data: "):]
+            
+            decoded_line = line.decode('utf-8')
+            if not decoded_line.startswith("data: "):
+                continue
+
+            data = decoded_line[len("data: "):]
             if data == "[DONE]":
                 print(f'R: {"".join(response)}')
 
@@ -173,10 +178,15 @@ def stream_multimodal(item: PromptItem, file_field: dict):
                 yield error_msg
                 return
                 
-            for line in r.iter_lines(decode_unicode=True):
-                if not line.startswith("data: "):
+            for line in r.iter_lines():
+                if not line:
                     continue
-                chunk = line[len("data: "):]
+                
+                decoded_line = line.decode('utf-8')
+                if not decoded_line.startswith("data: "):
+                    continue
+
+                chunk = decoded_line[len("data: "):]
                 if chunk == "[DONE]":
                     break
                 try:
