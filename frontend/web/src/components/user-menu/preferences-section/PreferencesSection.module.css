@@ -1,0 +1,433 @@
+.container {
+    max-width: 42rem;
+    margin: 0 auto;
+}
+
+.header {
+    margin-bottom: 2rem;
+}
+
+.title {
+    font-size: 1.875rem;
+    font-weight: 700;
+    color: white;
+    margin: 0 0 0.5rem 0;
+    line-height: 1.2;
+}
+
+.subtitle {
+    font-size: 0.875rem;
+    color: #a3a3a3;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.settingsGrid {
+    display: grid;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.settingCard {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    backdrop-filter: blur(8px);
+    transition: all 0.2s ease;
+}
+
+.settingCard:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.settingHeader {
+    margin-bottom: 1rem;
+}
+
+.settingTitle {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: white;
+    margin: 0 0 0.25rem 0;
+}
+
+.settingDescription {
+    font-size: 0.875rem;
+    color: #a3a3a3;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.settingControl {
+    display: flex;
+    align-items: center;
+}
+
+.select {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    color: white;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+.select:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.select:hover:not(:focus) {
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.select option {
+    background: #262626;
+    color: white;
+    padding: 0.5rem;
+}
+
+.radioGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    width: 100%;
+}
+
+.radioLabel {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.radioLabel:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.radioInput {
+    display: none;
+}
+
+.radioCustom {
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    position: relative;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.radioCustom::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    width: 0.5rem;
+    height: 0.5rem;
+    background: #3b82f6;
+    border-radius: 50%;
+    transition: transform 0.2s ease;
+}
+
+.radioInput:checked + .radioCustom {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.radioInput:checked + .radioCustom::after {
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.radioContent {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.radioTitle {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: white;
+}
+
+.radioDescription {
+    font-size: 0.75rem;
+    color: #a3a3a3;
+    line-height: 1.3;
+}
+
+.toggleLabel {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+}
+
+.toggleInput {
+    display: none;
+}
+
+.toggleSlider {
+    position: relative;
+    width: 3rem;
+    height: 1.5rem;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 0.75rem;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+}
+
+.toggleInput:checked + .toggleSlider {
+    background: #3b82f6;
+}
+
+.toggleThumb {
+    position: absolute;
+    left: 0.125rem;
+    width: 1.25rem;
+    height: 1.25rem;
+    background: white;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #a3a3a3;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggleInput:checked + .toggleSlider .toggleThumb {
+    transform: translateX(1.5rem);
+    color: #3b82f6;
+}
+
+.toggleText {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: white;
+}
+
+.themeSelector {
+    display: flex;
+    gap: 0.75rem;
+    width: 100%;
+}
+
+.themeButton {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    color: #a3a3a3;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex: 1;
+    position: relative;
+}
+
+.themeButton:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: white;
+}
+
+.themeButtonActive {
+    background: rgba(59, 130, 246, 0.2) !important;
+    border-color: #3b82f6 !important;
+    color: #60a5fa !important;
+}
+
+.themeButtonDisabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.comingSoon {
+    position: absolute;
+    top: -0.25rem;
+    right: -0.25rem;
+    background: #f59e0b;
+    color: white;
+    font-size: 0.625rem;
+    font-weight: 600;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.keyboardShortcuts {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    backdrop-filter: blur(8px);
+}
+
+.shortcutsTitle {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: white;
+    margin: 0 0 1rem 0;
+}
+
+.shortcutsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: 1rem;
+}
+
+.shortcutItem {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+.shortcutItem:hover {
+    background: rgba(255, 255, 255, 0.05);
+    transform: translateY(-1px);
+}
+
+.shortcutKeys {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.shortcutKeys kbd {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.25rem;
+    padding: 0.125rem 0.375rem;
+    color: white;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.shortcutDescription {
+    font-size: 0.75rem;
+    color: #a3a3a3;
+    line-height: 1.3;
+}
+
+.actions {
+    display: flex;
+    justify-content: center;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.resetButton {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    color: #a3a3a3;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.resetButton:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: white;
+    transform: translateY(-1px);
+}
+
+@media (max-width: 768px) {
+    .container {
+        max-width: 100%;
+    }
+    
+    .settingCard {
+        padding: 1.25rem;
+    }
+    
+    .themeSelector {
+        flex-direction: column;
+    }
+    
+    .shortcutsGrid {
+        grid-template-columns: 1fr;
+    }
+    
+    .radioGroup {
+        gap: 0.5rem;
+    }
+    
+    .radioLabel {
+        padding: 0.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .shortcutsGrid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+    
+    .shortcutItem {
+        padding: 0.5rem;
+    }
+    
+    .title {
+        font-size: 1.5rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .settingCard:hover {
+        transform: none;
+    }
+    
+    .shortcutItem:hover {
+        transform: none;
+    }
+    
+    .resetButton:hover {
+        transform: none;
+    }
+    
+    .toggleThumb {
+        transition: transform 0.1s ease;
+    }
+    
+    .radioCustom::after {
+        transition: transform 0.1s ease;
+    }
+}

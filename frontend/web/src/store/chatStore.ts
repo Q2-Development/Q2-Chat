@@ -24,10 +24,15 @@ function formatFileSize(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
+interface BackendChat {
+  id: string;
+  title: string;
+}
+
 interface ChatState {
   chats: Chat[];
+  allChats: Chat[];
   visibleTabIds: string[];
-  sidebarTabIds: string[];
   activeChatId: string;
   models: OpenRouterModel[];
   modelsLoading: boolean;
@@ -36,6 +41,15 @@ interface ChatState {
   modelSearch: string;
   isSendingMessage: boolean;
   abortController: AbortController | null;
+  isSidebarOpen: boolean;
+  chatsLoading: boolean;
+  chatsLoaded: boolean;
+  dragState: {
+    isDragging: boolean;
+    draggedChatId: string | null;
+    draggedFrom: 'tab' | 'sidebar' | null;
+    dropZone: 'tab' | 'sidebar' | null;
+  };
   setActiveChatId: (id: string) => void;
   handleInputChange: (text: string) => void;
   handleModelChange: (model: string) => void;
@@ -44,29 +58,38 @@ interface ChatState {
   addNewChat: () => void;
   closeChat: (chatId: string) => void;
   renameChat: (chatId: string, newTitle: string) => void;
+  toggleSidebar: () => void;
   moveFromSidebar: (chatId: string) => void;
+  moveToSidebar: (chatId: string) => void;
   updateChatTitle: (chatId: string, title: string) => void;
   addPendingFiles: (files: FileList | File[]) => Promise<{ success: File[], errors: string[] }>;
   removePendingFile: (fileId: string) => void;
   clearPendingFiles: () => void;
   fetchModels: () => Promise<void>;
   setModelSearch: (search: string) => void;
+  fetchAllChats: () => Promise<void>;
+  setDragState: (state: Partial<typeof state.dragState>) => void;
+  clearDragState: () => void;
+  handleDragStart: (chatId: string, from: 'tab' | 'sidebar') => void;
+  handleDragEnd: () => void;
+  handleDrop: (chatId: string, to: 'tab' | 'sidebar') => void;
 }
 
 const initialChatId = generateUUID();
 
 export const useChatStore = create<ChatState>((set, get) => ({
-  chats: [{ 
-    id: initialChatId, 
-    title: "New Chat", 
-    messages: [], 
+  chats: [{
+    id: initialChatId,
+    title: "New Chat",
+    messages: [],
     input: "",
     model: "openai/gpt-4o",
     pendingFiles: []
   }],
+  allChats: [],
   visibleTabIds: [initialChatId],
-  sidebarTabIds: [],
   activeChatId: initialChatId,
+  isSidebarOpen: false,
   models: [],
   modelsLoading: false,
   modelsError: null,
@@ -74,8 +97,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   modelSearch: '',
   isSendingMessage: false,
   abortController: null,
+  chatsLoading: false,
+  chatsLoaded: false,
+  dragState: {
+    isDragging: false,
+    draggedChatId: null,
+    draggedFrom: null,
+    dropZone: null,
+  },
 
   setActiveChatId: (id: string) => set({ activeChatId: id }),
+  toggleSidebar: () => set(state => ({ isSidebarOpen: !state.isSidebarOpen })),
 
   handleInputChange: (text: string) => {
     const { activeChatId, chats } = get();
@@ -99,6 +131,119 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ modelSearch: search });
   },
 
+  fetchAllChats: async () => {
+    const { chatsLoaded, chatsLoading } = get();
+    
+    if (chatsLoaded || chatsLoading) return;
+    
+    set({ chatsLoading: true });
+    
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'}/chats`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const backendChats: BackendChat[] = await response.json();
+      
+      const { chats: currentChats } = get();
+      const allChats: Chat[] = [];
+      
+      for (const backendChat of backendChats) {
+        const existingChat = currentChats.find(c => c.id === backendChat.id);
+        if (existingChat) {
+          allChats.push({ ...existingChat, title: backendChat.title });
+        } else {
+          allChats.push({
+            id: backendChat.id,
+            title: backendChat.title,
+            messages: [],
+            input: "",
+            model: "openai/gpt-4o",
+            pendingFiles: []
+          });
+        }
+      }
+      
+      currentChats.forEach(chat => {
+        if (!backendChats.find(bc => bc.id === chat.id)) {
+          allChats.push(chat);
+        }
+      });
+      
+      set({
+        allChats,
+        chats: allChats,
+        chatsLoading: false,
+        chatsLoaded: true
+      });
+      
+    } catch (error) {
+      console.error('Failed to fetch chats:', error);
+      set({
+        chatsLoading: false,
+        chatsLoaded: true
+      });
+    }
+  },
+
+  setDragState: (newState) => {
+    set(state => ({
+      dragState: { ...state.dragState, ...newState }
+    }));
+  },
+
+  clearDragState: () => {
+    set({
+      dragState: {
+        isDragging: false,
+        draggedChatId: null,
+        draggedFrom: null,
+        dropZone: null,
+      }
+    });
+  },
+
+  handleDragStart: (chatId: string, from: 'tab' | 'sidebar') => {
+    get().setDragState({
+      isDragging: true,
+      draggedChatId: chatId,
+      draggedFrom: from
+    });
+  },
+
+  handleDragEnd: () => {
+    const { dragState } = get();
+    if (dragState.dropZone && dragState.draggedChatId) {
+      get().handleDrop(dragState.draggedChatId, dragState.dropZone);
+    }
+    get().clearDragState();
+  },
+
+  handleDrop: (chatId: string, to: 'tab' | 'sidebar') => {
+    if (to === 'tab') {
+      get().moveFromSidebar(chatId);
+    } else {
+      get().moveToSidebar(chatId);
+    }
+  },
+
+  moveToSidebar: (chatId: string) => {
+    const { visibleTabIds, activeChatId } = get();
+    const newVisibleTabIds = visibleTabIds.filter(id => id !== chatId);
+    
+    let newActiveChatId = activeChatId;
+    if (activeChatId === chatId && newVisibleTabIds.length > 0) {
+      newActiveChatId = newVisibleTabIds[newVisibleTabIds.length - 1];
+    }
+    
+    set({
+      visibleTabIds: newVisibleTabIds,
+      activeChatId: newActiveChatId
+    });
+  },
+
   fetchModels: async () => {
     const { modelsLoaded, modelsLoading } = get();
     
@@ -116,11 +261,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const data: OpenRouterResponse = await response.json();
       
       if (data.data && Array.isArray(data.data)) {
-        set({ 
-          models: data.data, 
-          modelsLoading: false, 
+        set({
+          models: data.data,
+          modelsLoading: false,
           modelsLoaded: true,
-          modelsError: null 
+          modelsError: null
         });
       } else {
         throw new Error('Invalid response format');
@@ -131,8 +276,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const errorMessage = 'Failed to load models. Using GPT-4o as default.';
       toast.error(errorMessage);
       
-      set({ 
-        modelsLoading: false, 
+      set({
+        modelsLoading: false,
         modelsError: errorMessage,
         modelsLoaded: true
       });
@@ -149,6 +294,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   updateChatTitle: (chatId: string, title: string) => {
     set({
       chats: get().chats.map((chat) =>
+        chat.id === chatId ? { ...chat, title } : chat
+      ),
+      allChats: get().allChats.map((chat) =>
         chat.id === chatId ? { ...chat, title } : chat
       ),
     });
@@ -338,7 +486,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     try {
- 
         let response: Response;
 
         if (originalPendingFiles.length > 0) {
@@ -442,7 +589,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   addNewChat: () => {
-    const { chats, visibleTabIds, sidebarTabIds } = get();
+    const { chats, visibleTabIds } = get();
     const newChat: Chat = {
       id: generateUUID(),
       title: "New Chat",
@@ -451,18 +598,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       model: "openai/gpt-4o",
       pendingFiles: []
     };
-
-    set({ chats: [...chats, newChat] });
+    
+    const allChats = [...chats, newChat];
 
     if (visibleTabIds.length >= MAX_VISIBLE_TABS) {
-      const movedToSidebar = visibleTabIds[0];
+      const newVisible = [...visibleTabIds.slice(1), newChat.id];
       set({
-        visibleTabIds: [...visibleTabIds.slice(1), newChat.id],
-        sidebarTabIds: [movedToSidebar, ...sidebarTabIds],
+        chats: allChats,
+        allChats: allChats,
+        visibleTabIds: newVisible,
         activeChatId: newChat.id,
       });
     } else {
       set({
+        chats: allChats,
+        allChats: allChats,
         visibleTabIds: [...visibleTabIds, newChat.id],
         activeChatId: newChat.id,
       });
@@ -470,7 +620,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   closeChat: (chatId: string) => {
-    const { chats, visibleTabIds, sidebarTabIds, activeChatId } = get();
+    const { chats, visibleTabIds, activeChatId } = get();
     if (chats.length <= 1) return;
 
     const chatToClose = chats.find(c => c.id === chatId);
@@ -480,46 +630,54 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
     }
 
-    const isVisible = visibleTabIds.includes(chatId);
     const newChats = chats.filter((c) => c.id !== chatId);
+    const newAllChats = get().allChats.filter((c) => c.id !== chatId);
     const newVisibleTabIds = visibleTabIds.filter((id) => id !== chatId);
-    const newSidebarTabIds = sidebarTabIds.filter((id) => id !== chatId);
 
-    if (isVisible && sidebarTabIds.length > 0) {
-      const toPromote = sidebarTabIds[0];
-      set({
-        chats: newChats,
-        visibleTabIds: [...newVisibleTabIds, toPromote],
-        sidebarTabIds: sidebarTabIds.slice(1),
-        activeChatId: activeChatId === chatId 
-          ? (newVisibleTabIds.find((id) => id !== chatId) || newChats[0].id)
-          : activeChatId,
-      });
-    } else {
-      set({
-        chats: newChats,
-        visibleTabIds: newVisibleTabIds,
-        sidebarTabIds: newSidebarTabIds,
-        activeChatId: activeChatId === chatId 
-          ? (newVisibleTabIds.find((id) => id !== chatId) || newChats[0].id)
-          : activeChatId,
-      });
+    const sidebarChats = newAllChats.filter(c => !newVisibleTabIds.includes(c.id));
+
+    if (newVisibleTabIds.length < MAX_VISIBLE_TABS && sidebarChats.length > 0) {
+      newVisibleTabIds.push(sidebarChats[0].id);
     }
+
+    let newActiveChatId = activeChatId;
+    if (activeChatId === chatId) {
+      const currentIndex = visibleTabIds.indexOf(chatId);
+      if (newVisibleTabIds.length > 0) {
+        newActiveChatId = newVisibleTabIds[Math.max(0, currentIndex - 1)];
+      } else {
+        newActiveChatId = newChats.length > 0 ? newChats[0].id : '';
+      }
+    }
+
+    set({
+      chats: newChats,
+      allChats: newAllChats,
+      visibleTabIds: newVisibleTabIds,
+      activeChatId: newActiveChatId
+    });
   },
 
   moveFromSidebar: (chatId: string) => {
-    const { visibleTabIds, sidebarTabIds } = get();
+    const { visibleTabIds, chats, allChats } = get();
+    
+    const chatToMove = allChats.find(c => c.id === chatId);
+    if (!chatToMove) return;
+
+    if (!chats.find(c => c.id === chatId)) {
+      set({
+        chats: [...chats, chatToMove]
+      });
+    }
+
     if (visibleTabIds.length >= MAX_VISIBLE_TABS) {
-      const toSidebar = visibleTabIds[0];
       set({
         visibleTabIds: [...visibleTabIds.slice(1), chatId],
-        sidebarTabIds: [toSidebar, ...sidebarTabIds.filter((id) => id !== chatId)],
         activeChatId: chatId,
       });
     } else {
       set({
         visibleTabIds: [...visibleTabIds, chatId],
-        sidebarTabIds: sidebarTabIds.filter((id) => id !== chatId),
         activeChatId: chatId,
       });
     }
