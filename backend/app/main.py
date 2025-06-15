@@ -1,13 +1,13 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.requests import Request
 from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from postgrest.base_request_builder import APIResponse
-from openai import OpenAI
-from app.models import LoginItem, PromptItem
-from app.auth.supabase_client import supabase
-from app.auth.functions import create_temp_user
-from app.chat.functions import get_chat_messages, send_chat_prompt, generate_chat_title, send_image_prompt, send_pdf_prompt
 import base64
+from app import (
+    LoginItem, PromptItem, supabase, get_temp_user,
+    get_chat_messages, send_chat_prompt, generate_chat_title, create_temp_user
+)
 import uuid
 import requests
 import dotenv
@@ -15,27 +15,24 @@ import os
 import gotrue
 import logging
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 DEBUG = True
 
 app = FastAPI()
-
-dotenv.load_dotenv()
-
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENAI_API_KEY"),
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-supabase = supabase
+dotenv.load_dotenv()
 
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
-
-
-# Auth Functions
 
 @app.post("/signup")
 def post_signup(item: LoginItem):
@@ -96,12 +93,15 @@ def get_user_and_chat(chatId: str | None):
     return user, chatId
 
 # Send chat info
-
 @app.get("/models")
 def get_models():
-    r = requests.get("https://openrouter.ai/api/v1/models")
+    headers = {
+        "Authorization": f'Bearer {os.getenv("OPEN_ROUTER_KEY")}',  # Changed to use OPEN_ROUTER_KEY
+        "Content-Type": "application/json"
+    }
+    r = requests.get("https://openrouter.ai/api/v1/models", headers=headers)
     if r.status_code >= 200 and r.status_code <= 299:
-        return r.text
+        return r.json()  
     else:
         return {"error": "Failed to retrieve models"}
 
@@ -151,13 +151,16 @@ def chat(item: PromptItem):
         # Make sure the chat actually exists
         # If not we need to create it
         if item.chatId == None or len(chat.data) != 1:
-            item.chatId = str(uuid.uuid4())
-            # Probably should have the new chat name auto change after the initial prompting
+            # If no chatId provided, generate one, otherwise use the provided one
+            if item.chatId is None:
+                item.chatId = str(uuid.uuid4())
+            
+            # Create the chat with the provided or generated ID
             supabase.table("chats") \
                 .insert({"id": item.chatId, "user_id": user.id, "title": "New Chat"}) \
                 .execute()
                 
-            title = generate_chat_title(client, item.prompt)
+            title = generate_chat_title(item.prompt)
             supabase.table("chats").update({"title": title}).eq("id", item.chatId).execute()
         # Load messages for context and add the prompt to the db
         messages = get_chat_messages(item.chatId)

@@ -1,0 +1,43 @@
+.sidebarContainer {
+    width: 12rem; /* w-48 */
+    background-color: #262626; /* neutral-800 */
+    padding: 0.5rem;
+    border-right: 1px solid #404040; /* neutral-700 */
+}
+
+.sidebarTitle {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.sidebarItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    transition: background-color 150ms;
+}
+
+.sidebarItem:hover {
+    background-color: #404040; /* neutral-700 */
+}
+
+.sidebarItemTitle {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.875rem;
+}
+
+.closeButton {
+    background: transparent;
+    border: none;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+} 
