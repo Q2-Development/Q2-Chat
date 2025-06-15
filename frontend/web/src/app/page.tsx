@@ -13,13 +13,24 @@ export default function ChatPage() {
     visibleTabIds,
     sidebarTabIds,
     activeChatId,
+    models,
+    modelsLoading,
+    modelsError,
+    modelSearch,
+    isSendingMessage,
     setActiveChatId,
     handleInputChange,
     handleSendMessage,
+    stopGenerating,
     handleModelChange,
     addNewChat,
     closeChat,
+    renameChat,
     moveFromSidebar,
+    addPendingFiles,
+    removePendingFile,
+    fetchModels,
+    setModelSearch
   } = useChatStore();
 
   const activeChat = chats.find((c: Chat) => c.id === activeChatId)!;
@@ -43,6 +54,7 @@ export default function ChatPage() {
           setActiveChatId={setActiveChatId}
           closeChat={closeChat}
           addNewChat={addNewChat}
+          renameChat={renameChat}
         />
 
         <ChatBody messages={activeChat.messages} />
@@ -50,9 +62,20 @@ export default function ChatPage() {
         <ChatInput
           inputValue={activeChat.input}
           selectedModel={activeChat.model}
-          onInputChange={handleInputChange}
+          pendingFiles={activeChat.pendingFiles}
+          models={models}
+          modelsLoading={modelsLoading}
+          modelsError={modelsError}
+          modelSearch={modelSearch}
+          isSendingMessage={isSendingMessage}
+          onInputChange={(text) => handleInputChange(text)}
           onSend={handleSendMessage}
-          onModelChange={handleModelChange}
+          onStop={stopGenerating}
+          onModelChange={(model) => handleModelChange(model)}
+          onAddFiles={addPendingFiles}
+          onRemoveFile={removePendingFile}
+          onFetchModels={fetchModels}
+          onModelSearch={setModelSearch}
         />
       </div>
     </div>

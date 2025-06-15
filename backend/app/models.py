@@ -11,5 +11,9 @@ class PromptItem(BaseModel):
     model: str
     prompt: str
 
+class UpdateTitleItem(BaseModel):
+    title: str
+
 class KeyItem(BaseModel):
     key: str
+
