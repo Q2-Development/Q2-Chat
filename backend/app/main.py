@@ -3,7 +3,11 @@ from fastapi.requests import Request
 from fastapi.responses import StreamingResponse
 from postgrest.base_request_builder import APIResponse
 from openai import OpenAI
-from app.models import LoginItem, PromptItem
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+import base64
+from app.models import KeyItem, LoginItem, PromptItem
 from app.auth.supabase_client import supabase
 from app.auth.functions import create_temp_user
 from app.chat.functions import get_chat_messages, send_chat_prompt
@@ -13,7 +17,6 @@ import dotenv
 import os
 import gotrue
 import logging
-
 
 logger = logging.getLogger(__name__)
 DEBUG = True
@@ -26,6 +29,17 @@ client = OpenAI(
   base_url="https://openrouter.ai/api/v1",
   api_key=os.getenv("OPENAI_API_KEY"),
 )
+
+kdf = PBKDF2HMAC(
+    algorithm=hashes.SHA256(),
+    length=32,
+    salt=os.getenv("ENCRYPTION_KEY").encode(),
+    iterations=1_200_000,
+)
+
+encryption_key = base64.urlsafe_b64encode(kdf.derive(os.getenv("ENCRYPTION_KEY").encode()))
+fernet = Fernet(encryption_key)
+
 
 supabase = supabase
 
@@ -76,6 +90,59 @@ def get_logout():
     return True
 
 # Send chat info
+
+@app.get("/key")
+def get_key():
+    try:
+        user = supabase.auth.get_user()
+        if not user:
+            logger.info("Guest Mode active")
+            user = create_temp_user().user
+        else: 
+            user = user.user
+        
+        keys = supabase.table("keys") \
+            .select("*") \
+            .eq("user_id", user.id) \
+            .execute()
+        
+        if (len(keys.data) >= 1):
+            encryptedKey = keys.data[0]["key"]
+            key = fernet.decrypt(encryptedKey.encode("ascii")).decode("ascii")
+            return key
+        else:
+            return None
+    
+    except:
+        print("No user logged in")
+        return {"error": "No user logged in"}
+    
+@app.post("/key")
+def post_key(item: KeyItem):
+    try:
+        user = supabase.auth.get_user()
+        if not user:
+            logger.info("Guest Mode active")
+            user = create_temp_user().user
+        else: 
+            user = user.user
+        
+        assert (item.key != None and item.key != "")
+
+        key = fernet.encrypt(item.key.encode("ascii")).decode("ascii")
+        
+        supabase.table("keys") \
+            .upsert({"user_id": user.id, "key": key}) \
+            .execute()
+        
+        return True
+    except AssertionError:
+        print("No key was provided")
+        return {"error": "No key was provided"}
+
+    except:
+        print("No user logged in")
+        return {"error": "No user logged in"}
 
 @app.get("/models")
 def get_models():
@@ -144,6 +211,6 @@ def chat(item: PromptItem):
 
         # Use normal function if debugging is needed
         # return send_chat_prompt(item, user, messages)
-        return StreamingResponse(send_chat_prompt(item, user, messages), media_type="text/event-stream")
+        return StreamingResponse(send_chat_prompt(item, user, messages, item.key), media_type="text/event-stream")
     except Exception as e:
         return {"error": e}

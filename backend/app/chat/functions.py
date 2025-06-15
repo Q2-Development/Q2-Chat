@@ -16,10 +16,10 @@ def get_chat_messages(chatId:str):
         .execute()
 
 # Send chat
-def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIResponse):
+def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIResponse, key: str):
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {os.getenv("OPENAI_API_KEY")}",
+        "Authorization": f'''Bearer {key if (key != None and key != '') else os.getenv('OPENAI_API_KEY')}''',
         "Content-Type": "application/json"
     }
 
