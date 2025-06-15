@@ -109,7 +109,6 @@ def generate_chat_title(prompt: str) -> str:
         "max_tokens": 5,
         "temperature": 0.2
     }
-    
     try:
         response = requests.post(url, headers=headers, json=payload)
         response.raise_for_status()
@@ -192,12 +191,3 @@ def send_pdf_prompt(item: PromptItem, file_bytes: bytes, content_type: str):
         }
     }
     return stream_multimodal(item, file_field)
-#     try:
-#         response = requests.post(url, headers=headers, json=payload)
-#         response.raise_for_status()
-#         data = response.json()
-#         raw = data["choices"][0]["message"]["content"] or "Untitled Chat"
-#         return raw.strip().strip('"')
-#     except Exception as e:
-#         logger.error(f"Error generating chat title: {str(e)}")
-#         return "Untitled Chat"
