@@ -1,13 +1,15 @@
+from fastapi import UploadFile
 from postgrest.base_request_builder import APIResponse
 from app.models import PromptItem
 from .prompts import SYSTEM_PROMPT
 from app.auth.supabase_client import supabase
 from postgrest.base_request_builder import APIResponse
 
-import requests
-import json
 import os
+import json
 import gotrue
+import base64
+import requests
 import logging
 
 logger = logging.getLogger(__name__)
@@ -107,13 +109,87 @@ def generate_chat_title(prompt: str) -> str:
         "max_tokens": 5,
         "temperature": 0.2
     }
-    
-    try:
-        response = requests.post(url, headers=headers, json=payload)
-        response.raise_for_status()
-        data = response.json()
-        raw = data["choices"][0]["message"]["content"] or "Untitled Chat"
-        return raw.strip().strip('"')
-    except Exception as e:
-        logger.error(f"Error generating chat title: {str(e)}")
-        return "Untitled Chat"
+    raw = response.choices[0].message.content or "Untitled Chat"
+    return raw.strip().strip('"')
+
+def stream_multimodal(item: PromptItem, file_field: dict):
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}",
+        "Content-Type":  "application/json"
+    }
+
+    # 1) record user prompt
+    supabase.table("messages").insert({
+        "chat_id":     item.chatId,
+        "provider_id": item.model,
+        "content":     item.prompt,
+        "speaker":     "User"
+    }).execute()
+
+    # 2) build payload
+    multimodal = {
+        "role":    "user",
+        "content": [
+            {"type": "text",      "text": item.prompt},
+            file_field
+        ]
+    }
+    payload = {"model": item.model, "messages": [multimodal], "stream": True}
+
+    # 3) stream the response
+    buffer = []
+    with requests.post(url, headers=headers, json=payload, stream=True) as r:
+        r.raise_for_status()
+        for line in r.iter_lines(decode_unicode=True):
+            if not line.startswith("data: "):
+                continue
+            chunk = line[len("data: "):]
+            if chunk == "[DONE]":
+                break
+            try:
+                delta = json.loads(chunk)["choices"][0]["delta"].get("content")
+                if delta:
+                    buffer.append(delta)
+                    yield delta
+            except Exception:
+                continue
+
+    # 4) record assistant reply
+    full = "".join(buffer)
+    supabase.table("messages").insert({
+        "chat_id":     item.chatId,
+        "provider_id": item.model,
+        "content":     full,
+        "speaker":     "Assistant"
+    }).execute()
+
+
+def send_image_prompt(item: PromptItem, file_bytes: bytes, content_type: str):
+    b64 = base64.b64encode(file_bytes).decode("utf-8")
+    data_url = f"data:{content_type};base64,{b64}"
+    file_field = {"type": "image_url", "image_url": {"url": data_url}}
+    # simply return the generator
+    return stream_multimodal(item, file_field)
+
+
+def send_pdf_prompt(item: PromptItem, file_bytes: bytes, content_type: str):
+    b64 = base64.b64encode(file_bytes).decode("utf-8")
+    data_url = f"data:{content_type};base64,{b64}"
+    file_field = {
+        "type": "file",
+        "file": {
+            "filename": getattr(item, "filename", "upload.pdf"),
+            "file_data": data_url
+        }
+    }
+    return stream_multimodal(item, file_field)
+#     try:
+#         response = requests.post(url, headers=headers, json=payload)
+#         response.raise_for_status()
+#         data = response.json()
+#         raw = data["choices"][0]["message"]["content"] or "Untitled Chat"
+#         return raw.strip().strip('"')
+#     except Exception as e:
+#         logger.error(f"Error generating chat title: {str(e)}")
+#         return "Untitled Chat"

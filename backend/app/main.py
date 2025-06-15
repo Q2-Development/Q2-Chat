@@ -1,8 +1,9 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.requests import Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from postgrest.base_request_builder import APIResponse
+import base64
 from app import (
     LoginItem, PromptItem, supabase, get_temp_user,
     get_chat_messages, send_chat_prompt, generate_chat_title, create_temp_user
@@ -72,6 +73,26 @@ def get_logout():
     supabase.auth.sign_out()
     return True
 
+def get_user_and_chat(chatId: str | None):
+    """Determine user (or guest) and ensure chatId exists."""
+    user_resp = supabase.auth.get_user()
+    if not user_resp:
+        logger.info("Guest Mode active")
+        user = create_temp_user().user
+    else:
+        user = user_resp.user
+
+    if not chatId:
+        chatId = str(uuid.uuid4())
+        supabase.table("chats").insert({
+            "id":      chatId,
+            "user_id": user.id,
+            "title":   "New Chat"
+        }).execute()
+
+    return user, chatId
+
+# Send chat info
 @app.get("/models")
 def get_models():
     headers = {
@@ -149,8 +170,63 @@ def chat(item: PromptItem):
         # return send_chat_prompt(item, user, messages)
         return StreamingResponse(send_chat_prompt(item, user, messages), media_type="text/event-stream")
     except Exception as e:
-        return {"error": str(e)}
-    
+        return {"error": e}
+
+@app.post("/chat/upload/image")
+async def chat_upload_image(
+    model:     str           = Form(...),
+    chatId:    str | None    = Form(None),
+    prompt:    str           = Form(""),
+    file:      UploadFile    = File(...)
+):
+    # 1) Lookup or create user + chat
+    user, chatId = get_user_and_chat(chatId)
+
+    # 2) Read file bytes once
+    file_bytes    = await file.read()
+    content_type  = file.content_type
+
+    # 3) Build PromptItem
+    item = PromptItem(model=model, chatId=chatId, prompt=prompt)
+
+    # 4) Stream via the image helper
+    try:
+        return StreamingResponse(
+            send_image_prompt(item, file_bytes, content_type),
+            media_type="text/event-stream"
+        )
+    except Exception as e:
+        logger.error("Error in /chat/upload/image:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/chat/upload/pdf")
+async def chat_upload_pdf(
+    model:     str           = Form(...),
+    chatId:    str | None    = Form(None),
+    prompt:    str           = Form(""),
+    file:      UploadFile    = File(...)
+):
+    # 1) Lookup or create user + chat
+    user, chatId = get_user_and_chat(chatId)
+
+    # 2) Read file bytes once
+    file_bytes    = await file.read()
+    content_type  = file.content_type
+
+    # 3) Build PromptItem
+    item = PromptItem(model=model, chatId=chatId, prompt=prompt)
+
+    # 4) Stream via the PDF helper
+    try:
+        return StreamingResponse(
+            send_pdf_prompt(item, file_bytes, content_type),
+            media_type="text/event-stream"
+        )
+    except Exception as e:
+        logger.error("Error in /chat/upload/pdf:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/chat/{chat_id}/title")
 def get_chat_title(chat_id: str):
     # Query Supabase for just the title field
