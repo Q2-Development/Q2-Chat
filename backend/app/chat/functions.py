@@ -1,18 +1,36 @@
 from fastapi import UploadFile
-from postgrest.base_request_builder import APIResponse
 from app.models import PromptItem
 from .prompts import SYSTEM_PROMPT
 from app.auth.supabase_client import supabase
 from postgrest.base_request_builder import APIResponse
+from pathlib import Path
 
+import dotenv
 import os
 import json
 import gotrue
 import base64
 import requests
 import logging
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 logger = logging.getLogger(__name__)
+
+dotenv.load_dotenv(Path(__file__).parent.parent / ".env")
+
+kdf = PBKDF2HMAC(
+    algorithm=hashes.SHA256(),
+    length=32,
+    salt=os.getenv("ENCRYPTION_KEY").encode(),
+    iterations=1_200_000,
+)
+
+encryption_key = base64.urlsafe_b64encode(kdf.derive(os.getenv("ENCRYPTION_KEY").encode()))
+fernet = Fernet(encryption_key)
+
+
 
 def get_chat_messages(chatId:str):
     return supabase.table("messages") \
@@ -21,11 +39,11 @@ def get_chat_messages(chatId:str):
         .execute()
 
 # Send chat
-def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIResponse):
+def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIResponse, key: str):
     logger.info(f"Prompt: {item.prompt}")
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
-        "Authorization": f'Bearer {os.getenv("OPEN_ROUTER_KEY")}', 
+        "Authorization": f"Bearer {key if (key != None and key != '') else os.getenv('OPENAI_API_KEY')}",
         "Content-Type": "application/json"
     }
 
@@ -109,6 +127,7 @@ def generate_chat_title(prompt: str) -> str:
         "max_tokens": 5,
         "temperature": 0.2
     }
+
     try:
         response = requests.post(url, headers=headers, json=payload)
         response.raise_for_status()
@@ -191,3 +210,5 @@ def send_pdf_prompt(item: PromptItem, file_bytes: bytes, content_type: str):
         }
     }
     return stream_multimodal(item, file_field)
+
+
