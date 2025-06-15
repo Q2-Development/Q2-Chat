@@ -6,7 +6,7 @@ from postgrest.base_request_builder import APIResponse
 from typing import Optional
 import base64
 from app import (
-    LoginItem, PromptItem, supabase, get_temp_user,
+    LoginItem, PromptItem, UpdateTitleItem, supabase, get_temp_user,
     get_chat_messages, send_chat_prompt, generate_chat_title, create_temp_user,
     send_image_prompt, send_pdf_prompt
 )
@@ -257,3 +257,28 @@ def get_chat_title(chat_id: str):
 
     # resp.data looks like {"title": "Your Generated Title"}
     return {"chatId": chat_id, "title": resp.data["title"]}
+
+def _maybe_generate_and_set_title(chatId: str, is_new_chat: bool, first_prompt: str):
+    if is_new_chat and first_prompt:
+        try:
+            title = generate_chat_title(first_prompt)
+            supabase.table("chats").update({"title": title}).eq("id", chatId).execute()
+        except Exception as e:
+            logger.error(f"Could not generate chat title for chat {chatId}: {e}")
+
+@app.post("/chats/{chat_id}")
+def patch_chat_title(chat_id: str, item: UpdateTitleItem):
+    try:
+        user = supabase.auth.get_user()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+
+        res = supabase.table("chats").select("id", count='exact').eq("id", chat_id).eq("user_id", user.user.id).execute()
+        if res.count == 0:
+            raise HTTPException(status_code=404, detail="Chat not found or access denied")
+
+        supabase.table("chats").update({"title": item.title}).eq("id", chat_id).execute()
+        return {"message": "Title updated successfully"}
+    except Exception as e:
+        logger.error(f"Error updating title for chat {chat_id}: {e}")
+        raise HTTPException(status_code=500, detail="Could not update chat title")

@@ -34,12 +34,16 @@ interface ChatState {
   modelsError: string | null;
   modelsLoaded: boolean;
   modelSearch: string;
+  isSendingMessage: boolean;
+  abortController: AbortController | null;
   setActiveChatId: (id: string) => void;
   handleInputChange: (text: string) => void;
   handleModelChange: (model: string) => void;
   handleSendMessage: () => void;
+  stopGenerating: () => void;
   addNewChat: () => void;
   closeChat: (chatId: string) => void;
+  renameChat: (chatId: string, newTitle: string) => void;
   moveFromSidebar: (chatId: string) => void;
   updateChatTitle: (chatId: string, title: string) => void;
   addPendingFiles: (files: FileList | File[]) => Promise<{ success: File[], errors: string[] }>;
@@ -68,6 +72,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   modelsError: null,
   modelsLoaded: false,
   modelSearch: '',
+  isSendingMessage: false,
+  abortController: null,
 
   setActiveChatId: (id: string) => set({ activeChatId: id }),
 
@@ -146,6 +152,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
         chat.id === chatId ? { ...chat, title } : chat
       ),
     });
+  },
+
+  renameChat: async (chatId: string, newTitle: string) => {
+    const originalChat = get().chats.find(c => c.id === chatId);
+    if (!originalChat || originalChat.title === newTitle) return;
+
+    get().updateChatTitle(chatId, newTitle);
+
+    try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'}/chats/${chatId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: newTitle }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to update chat title on the server.');
+        }
+    } catch (error) {
+        console.error('Failed to rename chat:', error);
+        toast.error('Could not rename chat. Please try again.');
+        get().updateChatTitle(chatId, originalChat.title);
+    }
   },
 
   addPendingFiles: async (files: FileList | File[]): Promise<{ success: File[], errors: string[] }> => {
@@ -245,272 +274,170 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
+  stopGenerating: () => {
+    const { abortController } = get();
+    if (abortController) {
+      abortController.abort();
+      set({ isSendingMessage: false, abortController: null });
+    }
+  },
+
   handleSendMessage: async () => {
-    const { activeChatId, chats } = get();
+    const { activeChatId, chats, isSendingMessage } = get();
+    if (isSendingMessage) return;
+
     const activeChat = chats.find((c) => c.id === activeChatId);
-    if (!activeChat) return;
-
-    if (!activeChat.input.trim() && activeChat.pendingFiles.length === 0) return;
-
-    const isFirstMessage = activeChat.messages.length === 0;
-
-    if (activeChat.pendingFiles.length > 0) {
-      for (const pendingFile of activeChat.pendingFiles) {
-        const userMessage: Message = {
-          id: Date.now().toString() + Math.random(),
-          text: activeChat.input.trim() || `Uploaded ${pendingFile.file.name}`,
-          isUser: true,
-          timestamp: new Date(),
-          file: {
-            url: pendingFile.url,
-            type: pendingFile.file.type,
-            name: pendingFile.file.name
-          }
-        };
-
-        set({
-          chats: get().chats.map((chat) =>
-            chat.id === activeChatId
-              ? { ...chat, messages: [...chat.messages, userMessage] }
-              : chat
-          ),
-        });
-
-        const assistantMessageId = (Date.now() + Math.random()).toString();
-        const assistantMessage: Message = {
-          id: assistantMessageId,
-          text: "",
-          isUser: false,
-          timestamp: new Date(),
-          isStreaming: true,
-        };
-
-        set({
-          chats: get().chats.map((chat) =>
-            chat.id === activeChatId
-              ? { ...chat, messages: [...chat.messages, assistantMessage] }
-              : chat
-          ),
-        });
-
-        try {
-          const formData = new FormData();
-          formData.append('file', pendingFile.file);
-          formData.append('model', activeChat.model);
-          formData.append('chatId', activeChat.id);
-          formData.append('prompt', activeChat.input.trim() || `Please analyze this ${pendingFile.type} file.`);
-
-          const endpoint = pendingFile.type === 'image' 
-            ? '/chat/upload/image' 
-            : '/chat/upload/pdf';
-
-          const response = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'}${endpoint}`, {
-            method: 'POST',
-            body: formData,
-          });
-
-          if (!response.ok || !response.body) {
-            throw new Error(`Server responded with ${response.status}`);
-          }
-
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let accumulatedResponse = "";
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            
-            accumulatedResponse += decoder.decode(value, { stream: true });
-
-            set({
-              chats: get().chats.map((chat) =>
-                chat.id === activeChatId
-                  ? {
-                      ...chat,
-                      messages: chat.messages.map((m) =>
-                        m.id === assistantMessageId
-                          ? { ...m, text: accumulatedResponse }
-                          : m
-                      ),
-                    }
-                  : chat
-              ),
-            });
-          }
-
-          set({
-            chats: get().chats.map((chat) =>
-              chat.id === activeChatId
-                ? {
-                    ...chat,
-                    messages: chat.messages.map((m) =>
-                      m.id === assistantMessageId
-                        ? { ...m, isStreaming: false }
-                        : m
-                    ),
-                  }
-                : chat
-            ),
-          });
-
-        } catch (error) {
-          console.error("Error sending file:", error);
-          set({
-            chats: get().chats.map((chat) =>
-              chat.id === activeChatId
-                ? {
-                    ...chat,
-                    messages: chat.messages.map((msg) =>
-                      msg.id === assistantMessageId
-                        ? { 
-                            ...msg, 
-                            text: "Sorry, I encountered an error while processing your file. Please try again.",
-                            isStreaming: false 
-                          }
-                        : msg
-                    ),
-                  }
-                : chat
-            ),
-          });
-        }
-      }
-
-      get().clearPendingFiles();
-      set({
-        chats: get().chats.map((chat) =>
-          chat.id === activeChatId ? { ...chat, input: "" } : chat
-        ),
-      });
-
-    } else {
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        text: activeChat.input.trim(),
-        isUser: true,
-        timestamp: new Date(),
-      };
-
-      set({
-        chats: get().chats.map((chat) =>
-          chat.id === activeChatId
-            ? { ...chat, messages: [...chat.messages, userMessage], input: "" }
-            : chat
-        ),
-      });
-
-      const assistantMessageId = (Date.now() + 1).toString();
-      const assistantMessage: Message = {
-        id: assistantMessageId,
-        text: "",
-        isUser: false,
-        timestamp: new Date(),
-        isStreaming: true,
-      };
-
-      set({
-        chats: get().chats.map((chat) =>
-          chat.id === activeChatId
-            ? { ...chat, messages: [...chat.messages, assistantMessage] }
-            : chat
-        ),
-      });
-
-      try {
-        const response = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            message: userMessage.text,
-            model: activeChat.model,
-            chatId: activeChatId
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
-        let accumulatedText = "";
-
-        if (reader) {
-          while (true) {
-            const { done, value } = await reader.read();
-            
-            if (done) break;
-            
-            const chunk = decoder.decode(value, { stream: true });
-            accumulatedText += chunk;
-            
-            set({
-              chats: get().chats.map((chat) =>
-                chat.id === activeChatId
-                  ? {
-                      ...chat,
-                      messages: chat.messages.map((msg) =>
-                        msg.id === assistantMessageId
-                          ? { ...msg, text: accumulatedText }
-                          : msg
-                      ),
-                    }
-                  : chat
-              ),
-            });
-          }
-        }
-
-        set({
-          chats: get().chats.map((chat) =>
-            chat.id === activeChatId
-              ? {
-                  ...chat,
-                  messages: chat.messages.map((msg) =>
-                    msg.id === assistantMessageId
-                      ? { ...msg, isStreaming: false }
-                      : msg
-                  ),
-                }
-              : chat
-          ),
-        });
-
-      } catch (error) {
-        console.error('Failed to send message:', error);
-        
-        set({
-          chats: get().chats.map((chat) =>
-            chat.id === activeChatId
-              ? {
-                  ...chat,
-                  messages: chat.messages.map((msg) =>
-                    msg.id === assistantMessageId
-                      ? { 
-                          ...msg, 
-                          text: "Sorry, I encountered an error while processing your message. Please try again.",
-                          isStreaming: false 
-                        }
-                      : msg
-                  ),
-                }
-              : chat
-          ),
-        });
-      }
+    if (!activeChat || (!activeChat.input.trim() && activeChat.pendingFiles.length === 0)) {
+        return;
     }
 
-    if (isFirstMessage) {
-      try {
-        const titleResponse = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'}/chat/${activeChatId}/title`);
-        if (titleResponse.ok) {
-          const titleData = await titleResponse.json();
-          get().updateChatTitle(activeChatId, titleData.title);
+    const controller = new AbortController();
+    set({ isSendingMessage: true, abortController: controller });
+
+    const isFirstMessage = activeChat.messages.length === 0;
+    const originalInput = activeChat.input;
+    const originalPendingFiles = [...activeChat.pendingFiles];
+
+    const userMessage: Message = {
+        id: generateUUID(),
+        text: originalInput.trim(),
+        isUser: true,
+        timestamp: new Date(),
+    };
+
+    if (originalPendingFiles.length > 0) {
+        userMessage.file = {
+            url: originalPendingFiles[0].url,
+            type: originalPendingFiles[0].file.type,
+            name: originalPendingFiles[0].file.name,
+        };
+    }
+
+    const assistantMessageId = generateUUID();
+    set(state => ({
+        chats: state.chats.map(chat =>
+            chat.id === activeChatId
+                ? {
+                    ...chat,
+                    messages: [
+                        ...chat.messages,
+                        userMessage,
+                        {
+                            id: assistantMessageId,
+                            text: "",
+                            isUser: false,
+                            timestamp: new Date(),
+                            isStreaming: true,
+                        },
+                    ],
+                    input: '',
+                    pendingFiles: [],
+                }
+                : chat
+        ),
+    }));
+
+    try {
+ 
+        let response: Response;
+
+        if (originalPendingFiles.length > 0) {
+            const pendingFile = originalPendingFiles[0];
+            const formData = new FormData();
+            formData.append('file', pendingFile.file);
+            formData.append('model', activeChat.model);
+            formData.append('chatId', activeChat.id);
+            formData.append('prompt', originalInput.trim() || `Please analyze this ${pendingFile.type} file.`);
+            
+            const endpoint = pendingFile.type === 'image' ? '/chat/upload/image' : '/chat/upload/pdf';
+            response = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'}${endpoint}`, {
+                method: 'POST',
+                body: formData,
+                signal: controller.signal,
+            });
+        } else {
+            response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    message: userMessage.text,
+                    model: activeChat.model,
+                    chatId: activeChatId,
+                }),
+                signal: controller.signal,
+            });
         }
-      } catch (error) {
-        console.error('Failed to fetch chat title:', error);
-      }
+
+        if (!response.ok || !response.body) {
+            throw new Error(`Server responded with ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let accumulatedResponse = "";
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            accumulatedResponse += decoder.decode(value, { stream: true });
+            set(state => ({
+                chats: state.chats.map(chat =>
+                    chat.id === activeChatId
+                        ? {
+                            ...chat,
+                            messages: chat.messages.map(m =>
+                                m.id === assistantMessageId ? { ...m, text: accumulatedResponse } : m
+                            ),
+                        }
+                        : chat
+                ),
+            }));
+        }
+
+        set(state => ({
+            chats: state.chats.map(chat =>
+                chat.id === activeChatId
+                    ? {
+                        ...chat,
+                        messages: chat.messages.map(m =>
+                            m.id === assistantMessageId ? { ...m, isStreaming: false } : m
+                        ),
+                    }
+                    : chat
+            ),
+        }));
+        
+        if (isFirstMessage) {
+            get().updateChatTitle(activeChatId, "New Chat");
+        }
+    } catch (error: any) {
+        if (error.name === 'AbortError') {
+            console.log('Message generation stopped by user.');
+            set(state => ({
+                chats: state.chats.map(chat =>
+                    chat.id === activeChatId
+                        ? {
+                            ...chat,
+                            messages: chat.messages.slice(0, -2),
+                            input: originalInput,
+                            pendingFiles: originalPendingFiles,
+                        }
+                        : chat
+                ),
+            }));
+        } else {
+            console.error("Error sending message:", error);
+            toast.error("An error occurred. Please try again.");
+            set(state => ({
+                chats: state.chats.map(chat =>
+                    chat.id === activeChatId
+                        ? { ...chat, input: originalInput, pendingFiles: originalPendingFiles, messages: chat.messages.slice(0, -2) }
+                        : chat
+                )
+            }));
+        }
+    } finally {
+        set({ isSendingMessage: false, abortController: null });
     }
   },
 

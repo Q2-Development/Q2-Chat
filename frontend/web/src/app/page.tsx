@@ -17,12 +17,15 @@ export default function ChatPage() {
     modelsLoading,
     modelsError,
     modelSearch,
+    isSendingMessage,
     setActiveChatId,
     handleInputChange,
     handleSendMessage,
+    stopGenerating,
     handleModelChange,
     addNewChat,
     closeChat,
+    renameChat,
     moveFromSidebar,
     addPendingFiles,
     removePendingFile,
@@ -51,6 +54,7 @@ export default function ChatPage() {
           setActiveChatId={setActiveChatId}
           closeChat={closeChat}
           addNewChat={addNewChat}
+          renameChat={renameChat}
         />
 
         <ChatBody messages={activeChat.messages} />
@@ -63,8 +67,10 @@ export default function ChatPage() {
           modelsLoading={modelsLoading}
           modelsError={modelsError}
           modelSearch={modelSearch}
+          isSendingMessage={isSendingMessage}
           onInputChange={(text) => handleInputChange(text)}
           onSend={handleSendMessage}
+          onStop={stopGenerating}
           onModelChange={(model) => handleModelChange(model)}
           onAddFiles={addPendingFiles}
           onRemoveFile={removePendingFile}

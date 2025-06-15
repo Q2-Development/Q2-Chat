@@ -125,12 +125,21 @@ def generate_chat_title(prompt: str) -> str:
         logger.error(f"Error generating chat title: {str(e)}")
         return "Untitled Chat"
 
-def stream_multimodal(item: PromptItem, file_field: dict):
+def stream_multimodal(item: PromptItem, file_field: dict, chatId: str):
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {os.getenv('OPEN_ROUTER_KEY')}",
         "Content-Type":  "application/json"
     }
+
+    # Fetch and format previous messages to provide context
+    history_response = get_chat_messages(chatId)
+    history_response.data.sort(key=lambda m: m.get("created_at"))
+    
+    messages_in_api_format = [
+        {"role": message.get("speaker").lower(), "content": message.get("content")}
+        for message in history_response.data
+    ]
 
     # 1) record user prompt
     supabase.table("messages").insert({
@@ -154,8 +163,11 @@ def stream_multimodal(item: PromptItem, file_field: dict):
 
     # Final payload for the API
     payload = {
-        "model": item.model, # Use the model selected by the user
-        "messages": [user_message], 
+        "model": item.model,
+        "messages": [
+            *messages_in_api_format,
+            user_message
+        ], 
         "stream": True
     }
 
@@ -233,7 +245,7 @@ def send_image_prompt(item: PromptItem, file_bytes: bytes, content_type: str):
     b64 = base64.b64encode(file_bytes).decode("utf-8")
     data_url = f"data:{content_type};base64,{b64}"
     file_field = {"type": "image_url", "image_url": {"url": data_url}}
-    return stream_multimodal(item, file_field)
+    return stream_multimodal(item, file_field, item.chatId)
 
 def send_pdf_prompt(item: PromptItem, file_bytes: bytes, content_type: str, filename: str):
     """
@@ -254,4 +266,4 @@ def send_pdf_prompt(item: PromptItem, file_bytes: bytes, content_type: str, file
     }
     
     # 3. Use the generic multimodal streamer to send the request
-    return stream_multimodal(item, file_field)
+    return stream_multimodal(item, file_field, item.chatId)

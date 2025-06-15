@@ -9,3 +9,6 @@ class PromptItem(BaseModel):
     chatId: Optional[str] = None
     model: str
     prompt: str
+
+class UpdateTitleItem(BaseModel):
+    title: str

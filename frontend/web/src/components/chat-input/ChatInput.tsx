@@ -1,4 +1,4 @@
-import { IoAdd, IoOptionsOutline, IoChevronDown, IoClose, IoDocumentText, IoImage, IoSearch } from "react-icons/io5";
+import { IoAdd, IoOptionsOutline, IoChevronDown, IoClose, IoDocumentText, IoImage, IoSearch, IoStop } from "react-icons/io5";
 import { FaArrowUp } from "react-icons/fa6";
 import { Zap, Bot, Loader2 } from "lucide-react";
 import styles from "./ChatInput.module.css";
@@ -16,9 +16,11 @@ interface ChatInputProps {
     modelsLoading: boolean;
     modelsError: string | null;
     modelSearch: string;
+    isSendingMessage: boolean;
     onInputChange: (text: string) => void;
     onModelChange: (model: string) => void;
     onSend: () => void;
+    onStop: () => void;
     onAddFiles: (files: FileList | File[]) => Promise<{ success: File[], errors:string[] }>;
     onRemoveFile: (fileId: string) => void;
     onFetchModels: () => Promise<void>;
@@ -33,8 +35,10 @@ export const ChatInput = ({
     modelsLoading,
     modelsError,
     modelSearch,
+    isSendingMessage,
     onInputChange, 
     onSend, 
+    onStop,
     onModelChange, 
     onAddFiles,
     onRemoveFile,
@@ -58,9 +62,10 @@ export const ChatInput = ({
     const tooltipTimeoutRef = useRef<NodeJS.Timeout>();
 
     const selectedModelInfo = models.find(m => m.id === selectedModel);
-    const selectedModelName = selectedModelInfo?.name || "OpenAI: GPT-4o";
+    const selectedModelName = selectedModelInfo?.name || "GPT-4o";
     
     const toolsEnabled = selectedModelInfo ? modelSupportsTools(selectedModelInfo) : false;
+    const canSend = (inputValue.trim().length > 0 || pendingFiles.length > 0) && !isSendingMessage;
 
     const { popularModels, groupedModels } = useMemo(() => {
         let filtered = models;
@@ -333,7 +338,7 @@ export const ChatInput = ({
                 onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
-                        onSend();
+                        if (canSend) onSend();
                     }
                 }}
                 placeholder="Ask anything..."
@@ -478,9 +483,21 @@ export const ChatInput = ({
                         )}
                     </div>
                     
-                    <button onClick={onSend} className={`${styles.button} ${styles.iconButton}`}>
-                        <FaArrowUp size={18} />
-                    </button>
+                    {isSendingMessage ? (
+                        <button onClick={onStop} className={`${styles.button} ${styles.stopButton}`}>
+                            <div className={styles.loader}></div>
+                            <IoStop size={16} />
+                        </button>
+                    ) : (
+                        <button
+                            onClick={onSend}
+                            className={`${styles.button} ${styles.iconButton}`}
+                            disabled={!canSend}
+                            title={canSend ? "Send message" : "Enter a message or add a file to send"}
+                        >
+                            <FaArrowUp size={18} />
+                        </button>
+                    )}
                 </div>
             </div>
 
