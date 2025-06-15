@@ -3,8 +3,9 @@ import { FaArrowUp } from "react-icons/fa6";
 import { Zap, Bot, Loader2 } from "lucide-react";
 import styles from "./ChatInput.module.css";
 import { PendingFile } from "@/types/chat";
-import { OpenRouterModel, getProviderName, POPULAR_MODELS, isPopularModel } from "@/types/models";
+import { OpenRouterModel, getProviderName, POPULAR_MODELS, isPopularModel, getModelCapabilities, modelSupportsTools } from "@/types/models";
 import { PROVIDER_ICONS, getProviderIconKey } from "@/components/provider-icons";
+import { ModelTooltip } from "@/components/model-tooltip";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 
 interface ChatInputProps {
@@ -18,7 +19,7 @@ interface ChatInputProps {
     onInputChange: (text: string) => void;
     onModelChange: (model: string) => void;
     onSend: () => void;
-    onAddFiles: (files: FileList | File[]) => Promise<{ success: File[], errors: string[] }>;
+    onAddFiles: (files: FileList | File[]) => Promise<{ success: File[], errors:string[] }>;
     onRemoveFile: (fileId: string) => void;
     onFetchModels: () => Promise<void>;
     onModelSearch: (search: string) => void;
@@ -43,10 +44,23 @@ export const ChatInput = ({
     const [showModelDropdown, setShowModelDropdown] = useState(false);
     const [isDragOver, setIsDragOver] = useState(false);
     const [errors, setErrors] = useState<string[]>([]);
+    const [tooltipState, setTooltipState] = useState<{
+        visible: boolean;
+        model: OpenRouterModel | null;
+        position: { x: number; y: number };
+    }>({
+        visible: false,
+        model: null,
+        position: { x: 0, y: 0 }
+    });
+    
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const tooltipTimeoutRef = useRef<NodeJS.Timeout>();
 
     const selectedModelInfo = models.find(m => m.id === selectedModel);
-    const selectedModelName = selectedModelInfo?.name || "GPT-4o";
+    const selectedModelName = selectedModelInfo?.name || "OpenAI: GPT-4o";
+    
+    const toolsEnabled = selectedModelInfo ? modelSupportsTools(selectedModelInfo) : false;
 
     const { popularModels, groupedModels } = useMemo(() => {
         let filtered = models;
@@ -104,6 +118,35 @@ export const ChatInput = ({
         setShowModelDropdown(!showModelDropdown);
     };
 
+    const handleModelHover = useCallback((event: React.MouseEvent, model: OpenRouterModel) => {
+        if (tooltipTimeoutRef.current) {
+            clearTimeout(tooltipTimeoutRef.current);
+        }
+
+        const modelItemRect = event.currentTarget.getBoundingClientRect();
+        const dropdownRect = event.currentTarget.closest(`.${styles.modelDropdownMenu}`)?.getBoundingClientRect();
+        
+        if (!dropdownRect) return;
+
+        const x = dropdownRect.right + 10;
+        const y = modelItemRect.top + modelItemRect.height / 2;
+
+        tooltipTimeoutRef.current = setTimeout(() => {
+            setTooltipState({
+                visible: true,
+                model,
+                position: { x, y }
+            });
+        }, 300);
+    }, []);
+
+    const handleModelLeave = useCallback(() => {
+        if (tooltipTimeoutRef.current) {
+            clearTimeout(tooltipTimeoutRef.current);
+        }
+        setTooltipState(prev => ({ ...prev, visible: false }));
+    }, []);
+
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             const target = event.target as Element;
@@ -113,7 +156,12 @@ export const ChatInput = ({
         };
 
         document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            if (tooltipTimeoutRef.current) {
+                clearTimeout(tooltipTimeoutRef.current);
+            }
+        };
     }, [showModelDropdown]);
 
     const handleAddClick = () => {
@@ -296,7 +344,11 @@ export const ChatInput = ({
                     <button onClick={handleAddClick} className={`${styles.button} ${styles.iconButton}`}>
                         <IoAdd size={24} />
                     </button>
-                    <button className={`${styles.button} ${styles.toolsButton}`}>
+                    <button 
+                        className={`${styles.button} ${styles.toolsButton} ${!toolsEnabled ? styles.toolsButtonDisabled : ''}`}
+                        disabled={!toolsEnabled}
+                        title={toolsEnabled ? "Tools available" : "Current model doesn't support tools"}
+                    >
                         <IoOptionsOutline size={22} />
                         <span>Tools</span>
                     </button>
@@ -363,7 +415,10 @@ export const ChatInput = ({
                                                                 onModelChange(model.id);
                                                                 setShowModelDropdown(false);
                                                                 onModelSearch('');
+                                                                handleModelLeave();
                                                             }}
+                                                            onMouseEnter={(e) => handleModelHover(e, model)}
+                                                            onMouseLeave={handleModelLeave}
                                                             className={`${styles.modelItem} ${
                                                                 selectedModel === model.id ? styles.modelItemSelected : ''
                                                             }`}
@@ -395,7 +450,10 @@ export const ChatInput = ({
                                                                 onModelChange(model.id);
                                                                 setShowModelDropdown(false);
                                                                 onModelSearch('');
+                                                                handleModelLeave();
                                                             }}
+                                                            onMouseEnter={(e) => handleModelHover(e, model)}
+                                                            onMouseLeave={handleModelLeave}
                                                             className={`${styles.modelItem} ${
                                                                 selectedModel === model.id ? styles.modelItemSelected : ''
                                                             }`}
@@ -425,6 +483,15 @@ export const ChatInput = ({
                     </button>
                 </div>
             </div>
+
+            {tooltipState.model && (
+                <ModelTooltip
+                    model={tooltipState.model}
+                    capabilities={getModelCapabilities(tooltipState.model)}
+                    position={tooltipState.position}
+                    visible={tooltipState.visible}
+                />
+            )}
         </div>
     );
-}
+};

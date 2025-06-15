@@ -232,11 +232,12 @@
     font-weight: 500;
 }
 
-/* New model selector styles */
 .modelSelectorContainer {
     position: relative;
-    ::-webkit-scrollbar { display: none; }
     scrollbar-width: none;
+    ::-webkit-scrollbar {
+        display: none;
+    }
 }
 
 .modelSelectorButton {
@@ -270,10 +271,8 @@
     bottom: 100%;
     margin-bottom: 0.5rem;
     right: 0;
-    background-color: #404040; /* neutral-700 */
+    background-color: #1f2937;
     border-radius: 0.75rem;
-    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 10px 10px -5px rgb(0 0 0 / 0.04);
-    border: 1px solid #525252; /* neutral-600 */
     min-width: 20rem;
     max-width: 24rem;
     z-index: 20;
