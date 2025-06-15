@@ -84,8 +84,16 @@ def get_user_and_chat(chatId: Optional[str]):
     else:
         user = user_resp.user
 
-    if not chatId:
-        chatId = str(uuid.uuid4())
+    chat_exists = False
+    if chatId:
+        res = supabase.table("chats").select("id", count='exact').eq("id", chatId).execute()
+        if res.count > 0:
+            chat_exists = True
+
+    if not chat_exists:
+        if not chatId:
+            chatId = str(uuid.uuid4())
+        
         supabase.table("chats").insert({
             "id":      chatId,
             "user_id": user.id,

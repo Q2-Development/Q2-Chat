@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { Chat, Message, MAX_VISIBLE_TABS } from '@/types/chat';
+import { Chat, Message, PendingFile, MAX_VISIBLE_TABS, MAX_FILES_PER_MESSAGE, MAX_FILE_SIZE, ALLOWED_FILE_TYPES } from '@/types/chat';
+import { OpenRouterModel, OpenRouterResponse } from '@/types/models';
+import toast from 'react-hot-toast';
 
-// Simple UUID generator for frontend use
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     const r = Math.random() * 16 | 0;
@@ -10,11 +11,29 @@ function generateUUID(): string {
   });
 }
 
+function getFileType(file: File): 'image' | 'pdf' | null {
+  const fileType = ALLOWED_FILE_TYPES[file.type as keyof typeof ALLOWED_FILE_TYPES];
+  return fileType || null;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
 interface ChatState {
   chats: Chat[];
   visibleTabIds: string[];
   sidebarTabIds: string[];
   activeChatId: string;
+  models: OpenRouterModel[];
+  modelsLoading: boolean;
+  modelsError: string | null;
+  modelsLoaded: boolean;
+  modelSearch: string;
   setActiveChatId: (id: string) => void;
   handleInputChange: (text: string) => void;
   handleModelChange: (model: string) => void;
@@ -23,6 +42,11 @@ interface ChatState {
   closeChat: (chatId: string) => void;
   moveFromSidebar: (chatId: string) => void;
   updateChatTitle: (chatId: string, title: string) => void;
+  addPendingFiles: (files: FileList | File[]) => Promise<{ success: File[], errors: string[] }>;
+  removePendingFile: (fileId: string) => void;
+  clearPendingFiles: () => void;
+  fetchModels: () => Promise<void>;
+  setModelSearch: (search: string) => void;
 }
 
 const initialChatId = generateUUID();
@@ -33,11 +57,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
     title: "New Chat", 
     messages: [], 
     input: "",
-    model: "openai/gpt-3.5-turbo"
+    model: "openai/gpt-4o",
+    pendingFiles: []
   }],
   visibleTabIds: [initialChatId],
   sidebarTabIds: [],
   activeChatId: initialChatId,
+  models: [],
+  modelsLoading: false,
+  modelsError: null,
+  modelsLoaded: false,
+  modelSearch: '',
 
   setActiveChatId: (id: string) => set({ activeChatId: id }),
 
@@ -59,6 +89,57 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
+  setModelSearch: (search: string) => {
+    set({ modelSearch: search });
+  },
+
+  fetchModels: async () => {
+    const { modelsLoaded, modelsLoading } = get();
+    
+    if (modelsLoaded || modelsLoading) return;
+    
+    set({ modelsLoading: true, modelsError: null });
+    
+    try {
+      const response = await fetch('/api/models');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data: OpenRouterResponse = await response.json();
+      
+      if (data.data && Array.isArray(data.data)) {
+        set({ 
+          models: data.data, 
+          modelsLoading: false, 
+          modelsLoaded: true,
+          modelsError: null 
+        });
+      } else {
+        throw new Error('Invalid response format');
+      }
+    } catch (error) {
+      console.error('Failed to fetch models:', error);
+      
+      const errorMessage = 'Failed to load models. Using GPT-4o as default.';
+      toast.error(errorMessage);
+      
+      set({ 
+        modelsLoading: false, 
+        modelsError: errorMessage,
+        modelsLoaded: true
+      });
+      
+      const { activeChatId, chats } = get();
+      set({
+        chats: chats.map((chat) =>
+          chat.id === activeChatId ? { ...chat, model: "openai/gpt-4o" } : chat
+        ),
+      });
+    }
+  },
+
   updateChatTitle: (chatId: string, title: string) => {
     set({
       chats: get().chats.map((chat) =>
@@ -67,74 +148,214 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
+  addPendingFiles: async (files: FileList | File[]): Promise<{ success: File[], errors: string[] }> => {
+    const { activeChatId, chats } = get();
+    const activeChat = chats.find(c => c.id === activeChatId);
+    if (!activeChat) return { success: [], errors: ['No active chat found'] };
+
+    const fileArray = Array.from(files);
+    const errors: string[] = [];
+    const success: File[] = [];
+    const newPendingFiles: PendingFile[] = [...activeChat.pendingFiles];
+
+    for (const file of fileArray) {
+      if (newPendingFiles.length >= MAX_FILES_PER_MESSAGE) {
+        errors.push(`Maximum ${MAX_FILES_PER_MESSAGE} files allowed per message`);
+        break;
+      }
+
+      if (file.size > MAX_FILE_SIZE) {
+        errors.push(`File "${file.name}" is too large. Maximum size is ${formatFileSize(MAX_FILE_SIZE)}`);
+        continue;
+      }
+
+      const fileType = getFileType(file);
+      if (!fileType) {
+        errors.push(`File "${file.name}" is not a supported type. Supported: images, PDFs`);
+        continue;
+      }
+
+      const duplicate = newPendingFiles.find(pf => 
+        pf.file.name === file.name && pf.file.size === file.size
+      );
+      if (duplicate) {
+        errors.push(`File "${file.name}" is already added`);
+        continue;
+      }
+
+      const pendingFile: PendingFile = {
+        id: generateUUID(),
+        file,
+        url: URL.createObjectURL(file),
+        type: fileType
+      };
+
+      newPendingFiles.push(pendingFile);
+      success.push(file);
+    }
+
+    set({
+      chats: chats.map(chat =>
+        chat.id === activeChatId 
+          ? { ...chat, pendingFiles: newPendingFiles }
+          : chat
+      )
+    });
+
+    return { success, errors };
+  },
+
+  removePendingFile: (fileId: string) => {
+    const { activeChatId, chats } = get();
+    const activeChat = chats.find(c => c.id === activeChatId);
+    if (!activeChat) return;
+
+    const fileToRemove = activeChat.pendingFiles.find(pf => pf.id === fileId);
+    if (fileToRemove) {
+      URL.revokeObjectURL(fileToRemove.url);
+    }
+
+    set({
+      chats: chats.map(chat =>
+        chat.id === activeChatId
+          ? {
+              ...chat,
+              pendingFiles: chat.pendingFiles.filter(pf => pf.id !== fileId)
+            }
+          : chat
+      )
+    });
+  },
+
+  clearPendingFiles: () => {
+    const { activeChatId, chats } = get();
+    const activeChat = chats.find(c => c.id === activeChatId);
+    if (!activeChat) return;
+
+    activeChat.pendingFiles.forEach(pf => {
+      URL.revokeObjectURL(pf.url);
+    });
+
+    set({
+      chats: chats.map(chat =>
+        chat.id === activeChatId
+          ? { ...chat, pendingFiles: [] }
+          : chat
+      )
+    });
+  },
+
   handleSendMessage: async () => {
     const { activeChatId, chats } = get();
     const activeChat = chats.find((c) => c.id === activeChatId);
-    if (!activeChat?.input.trim()) return;
+    if (!activeChat) return;
 
-    // Check if this is the first message in the chat
+    if (!activeChat.input.trim() && activeChat.pendingFiles.length === 0) return;
+
     const isFirstMessage = activeChat.messages.length === 0;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: activeChat.input.trim(),
-      isUser: true,
-      timestamp: new Date(),
-    };
+    if (activeChat.pendingFiles.length > 0) {
+      for (const pendingFile of activeChat.pendingFiles) {
+        const userMessage: Message = {
+          id: Date.now().toString() + Math.random(),
+          text: activeChat.input.trim() || `Uploaded ${pendingFile.file.name}`,
+          isUser: true,
+          timestamp: new Date(),
+          file: {
+            url: pendingFile.url,
+            type: pendingFile.file.type,
+            name: pendingFile.file.name
+          }
+        };
 
-    set({
-      chats: chats.map((chat) =>
-        chat.id === activeChatId
-          ? { ...chat, messages: [...chat.messages, userMessage], input: "" }
-          : chat
-      ),
-    });
+        set({
+          chats: get().chats.map((chat) =>
+            chat.id === activeChatId
+              ? { ...chat, messages: [...chat.messages, userMessage] }
+              : chat
+          ),
+        });
 
-    const assistantMessageId = (Date.now() + 1).toString();
-    const assistantMessage: Message = {
-      id: assistantMessageId,
-      text: "",
-      isUser: false,
-      timestamp: new Date(),
-      isStreaming: true,
-    };
+        const assistantMessageId = (Date.now() + Math.random()).toString();
+        const assistantMessage: Message = {
+          id: assistantMessageId,
+          text: "",
+          isUser: false,
+          timestamp: new Date(),
+          isStreaming: true,
+        };
 
-    set({
-      chats: get().chats.map((chat) =>
-        chat.id === activeChatId
-          ? { ...chat, messages: [...chat.messages, assistantMessage] }
-          : chat
-      ),
-    });
+        set({
+          chats: get().chats.map((chat) =>
+            chat.id === activeChatId
+              ? { ...chat, messages: [...chat.messages, assistantMessage] }
+              : chat
+          ),
+        });
 
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: userMessage.text,
-          model: activeChat.model,
-          chatId: activeChatId
-        }),
-      });
+        try {
+          const formData = new FormData();
+          formData.append('file', pendingFile.file);
+          formData.append('model', activeChat.model);
+          formData.append('chatId', activeChat.id);
+          formData.append('prompt', activeChat.input.trim() || `Please analyze this ${pendingFile.type} file.`);
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+          const endpoint = pendingFile.type === 'image' 
+            ? '/chat/upload/image' 
+            : '/chat/upload/pdf';
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let accumulatedText = "";
+          const response = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'}${endpoint}`, {
+            method: 'POST',
+            body: formData,
+          });
 
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          
-          if (done) break;
-          
-          const chunk = decoder.decode(value, { stream: true });
-          accumulatedText += chunk;
-          
+          if (!response.ok || !response.body) {
+            throw new Error(`Server responded with ${response.status}`);
+          }
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let accumulatedResponse = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            accumulatedResponse += decoder.decode(value, { stream: true });
+
+            set({
+              chats: get().chats.map((chat) =>
+                chat.id === activeChatId
+                  ? {
+                      ...chat,
+                      messages: chat.messages.map((m) =>
+                        m.id === assistantMessageId
+                          ? { ...m, text: accumulatedResponse }
+                          : m
+                      ),
+                    }
+                  : chat
+              ),
+            });
+          }
+
+          set({
+            chats: get().chats.map((chat) =>
+              chat.id === activeChatId
+                ? {
+                    ...chat,
+                    messages: chat.messages.map((m) =>
+                      m.id === assistantMessageId
+                        ? { ...m, isStreaming: false }
+                        : m
+                    ),
+                  }
+                : chat
+            ),
+          });
+
+        } catch (error) {
+          console.error("Error sending file:", error);
           set({
             chats: get().chats.map((chat) =>
               chat.id === activeChatId
@@ -142,7 +363,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     ...chat,
                     messages: chat.messages.map((msg) =>
                       msg.id === assistantMessageId
-                        ? { ...msg, text: accumulatedText }
+                        ? { 
+                            ...msg, 
+                            text: "Sorry, I encountered an error while processing your file. Please try again.",
+                            isStreaming: false 
+                          }
                         : msg
                     ),
                   }
@@ -152,55 +377,140 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       }
 
+      get().clearPendingFiles();
+      set({
+        chats: get().chats.map((chat) =>
+          chat.id === activeChatId ? { ...chat, input: "" } : chat
+        ),
+      });
+
+    } else {
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        text: activeChat.input.trim(),
+        isUser: true,
+        timestamp: new Date(),
+      };
+
       set({
         chats: get().chats.map((chat) =>
           chat.id === activeChatId
-            ? {
-                ...chat,
-                messages: chat.messages.map((msg) =>
-                  msg.id === assistantMessageId
-                    ? { ...msg, isStreaming: false }
-                    : msg
-                ),
-              }
+            ? { ...chat, messages: [...chat.messages, userMessage], input: "" }
             : chat
         ),
       });
 
-      // If this was the first message, fetch the generated title from the backend
-      if (isFirstMessage) {
-        try {
-          const titleResponse = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'}/chat/${activeChatId}/title`);
-          if (titleResponse.ok) {
-            const titleData = await titleResponse.json();
-            get().updateChatTitle(activeChatId, titleData.title);
-          }
-        } catch (error) {
-          console.error('Failed to fetch chat title:', error);
+      const assistantMessageId = (Date.now() + 1).toString();
+      const assistantMessage: Message = {
+        id: assistantMessageId,
+        text: "",
+        isUser: false,
+        timestamp: new Date(),
+        isStreaming: true,
+      };
+
+      set({
+        chats: get().chats.map((chat) =>
+          chat.id === activeChatId
+            ? { ...chat, messages: [...chat.messages, assistantMessage] }
+            : chat
+        ),
+      });
+
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            message: userMessage.text,
+            model: activeChat.model,
+            chatId: activeChatId
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
-      }
 
-    } catch (error) {
-      console.error('Failed to send message:', error);
-      
-      set({
-        chats: get().chats.map((chat) =>
-          chat.id === activeChatId
-            ? {
-                ...chat,
-                messages: chat.messages.map((msg) =>
-                  msg.id === assistantMessageId
-                    ? { 
-                        ...msg, 
-                        text: "Sorry, I encountered an error while processing your message. Please try again.",
-                        isStreaming: false 
-                      }
-                    : msg
-                ),
-              }
-            : chat
-        ),
-      });
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let accumulatedText = "";
+
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            
+            if (done) break;
+            
+            const chunk = decoder.decode(value, { stream: true });
+            accumulatedText += chunk;
+            
+            set({
+              chats: get().chats.map((chat) =>
+                chat.id === activeChatId
+                  ? {
+                      ...chat,
+                      messages: chat.messages.map((msg) =>
+                        msg.id === assistantMessageId
+                          ? { ...msg, text: accumulatedText }
+                          : msg
+                      ),
+                    }
+                  : chat
+              ),
+            });
+          }
+        }
+
+        set({
+          chats: get().chats.map((chat) =>
+            chat.id === activeChatId
+              ? {
+                  ...chat,
+                  messages: chat.messages.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? { ...msg, isStreaming: false }
+                      : msg
+                  ),
+                }
+              : chat
+          ),
+        });
+
+      } catch (error) {
+        console.error('Failed to send message:', error);
+        
+        set({
+          chats: get().chats.map((chat) =>
+            chat.id === activeChatId
+              ? {
+                  ...chat,
+                  messages: chat.messages.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? { 
+                          ...msg, 
+                          text: "Sorry, I encountered an error while processing your message. Please try again.",
+                          isStreaming: false 
+                        }
+                      : msg
+                  ),
+                }
+              : chat
+          ),
+        });
+      }
+    }
+
+    if (isFirstMessage) {
+      try {
+        const titleResponse = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'}/chat/${activeChatId}/title`);
+        if (titleResponse.ok) {
+          const titleData = await titleResponse.json();
+          get().updateChatTitle(activeChatId, titleData.title);
+        }
+      } catch (error) {
+        console.error('Failed to fetch chat title:', error);
+      }
     }
   },
 
@@ -211,7 +521,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       title: "New Chat",
       messages: [],
       input: "",
-      model: "openai/gpt-3.5-turbo",
+      model: "openai/gpt-4o",
+      pendingFiles: []
     };
 
     set({ chats: [...chats, newChat] });
@@ -234,6 +545,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   closeChat: (chatId: string) => {
     const { chats, visibleTabIds, sidebarTabIds, activeChatId } = get();
     if (chats.length <= 1) return;
+
+    const chatToClose = chats.find(c => c.id === chatId);
+    if (chatToClose) {
+      chatToClose.pendingFiles.forEach(pf => {
+        URL.revokeObjectURL(pf.url);
+      });
+    }
 
     const isVisible = visibleTabIds.includes(chatId);
     const newChats = chats.filter((c) => c.id !== chatId);
