@@ -20,6 +20,8 @@ export default function ChatPage() {
     addNewChat,
     closeChat,
     moveFromSidebar,
+    addPendingFiles,
+    removePendingFile,
   } = useChatStore();
 
   const activeChat = chats.find((c: Chat) => c.id === activeChatId)!;
@@ -50,9 +52,12 @@ export default function ChatPage() {
         <ChatInput
           inputValue={activeChat.input}
           selectedModel={activeChat.model}
+          pendingFiles={activeChat.pendingFiles}
           onInputChange={handleInputChange}
           onSend={handleSendMessage}
           onModelChange={handleModelChange}
+          onAddFiles={addPendingFiles}
+          onRemoveFile={removePendingFile}
         />
       </div>
     </div>
