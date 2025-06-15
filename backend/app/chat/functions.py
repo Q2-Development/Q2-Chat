@@ -123,7 +123,7 @@ def generate_chat_title(prompt: str) -> str:
 def stream_multimodal(item: PromptItem, file_field: dict):
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {os.getenv('OPEN_ROUTER_KEY')}",  # Fixed: was OPENAI_API_KEY
+        "Authorization": f"Bearer {os.getenv('OPEN_ROUTER_KEY')}",
         "Content-Type":  "application/json"
     }
 
@@ -135,17 +135,25 @@ def stream_multimodal(item: PromptItem, file_field: dict):
         "speaker":     "User"
     }).execute()
 
-    # 2) build payload - ensure we use a vision-capable model
-    vision_model = get_vision_model(item.model)
+    # 2) build payload
+    multimodal_content = [
+        {"type": "text", "text": item.prompt},
+        file_field
+    ]
     
-    multimodal = {
-        "role":    "user",
-        "content": [
-            {"type": "text", "text": item.prompt},
-            file_field
-        ]
+    # The full message object for the user
+    user_message = {
+        "role": "user",
+        "content": multimodal_content
     }
-    payload = {"model": vision_model, "messages": [multimodal], "stream": True}
+
+    # Final payload for the API
+    payload = {
+        "model": item.model, # Use the model selected by the user
+        "messages": [user_message], 
+        "stream": True
+    }
+
 
     # 3) stream the response with better error handling
     buffer = []
@@ -217,113 +225,23 @@ def send_image_prompt(item: PromptItem, file_bytes: bytes, content_type: str):
     file_field = {"type": "image_url", "image_url": {"url": data_url}}
     return stream_multimodal(item, file_field)
 
-def send_pdf_prompt(item: PromptItem, file_bytes: bytes, content_type: str):
+def send_pdf_prompt(item: PromptItem, file_bytes: bytes, content_type: str, filename: str):
     """
-    Handle PDF files by converting to text first, since most LLMs don't support PDF directly.
-    We'll use a text-based approach similar to CSV handling.
+    Handles PDF files by encoding them and sending them to the OpenRouter API
+    in the format specified by their documentation.
     """
-    try:
-        # For now, we'll treat PDFs as text files and use the text approach
-        # In the future, you could integrate a PDF parser like PyPDF2 or pdfplumber
-        
-        # Create a text-based prompt explaining the PDF
-        enhanced_prompt = f"""
-            {item.prompt}
-
-            I've received a PDF file named "{getattr(item, 'filename', 'document.pdf')}". 
-            Unfortunately, I cannot directly read PDF files in this format. 
-
-            To help you with this PDF, please:
-            1. Copy and paste the text content from the PDF, or
-            2. Convert the PDF to text format and share it, or  
-            3. Tell me what specific information you're looking for and I can guide you on how to extract it.
-
-            What would you like to do with this PDF?
-        """
-        
-        # Use the regular chat prompt function with enhanced text
-        return send_text_prompt(item, enhanced_prompt)
-        
-    except Exception as e:
-        logger.error(f"Error processing PDF file: {str(e)}")
-        error_msg = f"Error processing PDF file: {str(e)}"
-        return send_text_prompt(item, error_msg)
-
-def send_text_prompt(item: PromptItem, prompt_text: str):
-    """
-    (used for CSV and PDF fallbacks)
-    """
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {os.getenv('OPEN_ROUTER_KEY')}",
-        "Content-Type":  "application/json"
+    # 1. Encode the file bytes into a base64 data URL
+    b64 = base64.b64encode(file_bytes).decode("utf-8")
+    data_url = f"data:{content_type};base64,{b64}"
+    
+    # 2. Create the file object for the payload
+    file_field = {
+        "type": "file",
+        "file": {
+            "filename": filename,
+            "file_data": data_url
+        }
     }
-
-    # Record user prompt
-    supabase.table("messages").insert({
-        "chat_id":     item.chatId,
-        "provider_id": item.model,
-        "content":     item.prompt + " [File uploaded]",
-        "speaker":     "User"
-    }).execute()
-
-    # Build payload for text-based analysis
-    payload = {
-        "model": item.model, 
-        "messages": [
-            {"role": "user", "content": prompt_text}
-        ], 
-        "stream": True
-    }
-
-    # Stream the response
-    buffer = []
-    try:
-        with requests.post(url, headers=headers, json=payload, stream=True) as r:
-            if not r.ok:
-                error_text = r.text
-                logger.error(f"OpenRouter API error ({r.status_code}): {error_text}")
-                error_msg = f"Error: {r.status_code} - {error_text}"
-                supabase.table("messages").insert({
-                    "chat_id":     item.chatId,
-                    "provider_id": item.model,
-                    "content":     error_msg,
-                    "speaker":     "Assistant"
-                }).execute()
-                yield error_msg
-                return
-                
-            for line in r.iter_lines(decode_unicode=True):
-                if not line.startswith("data: "):
-                    continue
-                chunk = line[len("data: "):]
-                if chunk == "[DONE]":
-                    break
-                try:
-                    delta = json.loads(chunk)["choices"][0]["delta"].get("content")
-                    if delta:
-                        buffer.append(delta)
-                        yield delta
-                except Exception:
-                    continue
-    except Exception as e:
-        logger.error(f"Error in send_text_prompt: {str(e)}")
-        error_msg = f"Error processing request: {str(e)}"
-        supabase.table("messages").insert({
-            "chat_id":     item.chatId,
-            "provider_id": item.model,
-            "content":     error_msg,
-            "speaker":     "Assistant"
-        }).execute()
-        yield error_msg
-        return
-
-    # Record assistant reply
-    full = "".join(buffer)
-    if full:
-        supabase.table("messages").insert({
-            "chat_id":     item.chatId,
-            "provider_id": item.model,
-            "content":     full,
-            "speaker":     "Assistant"
-        }).execute()
+    
+    # 3. Use the generic multimodal streamer to send the request
+    return stream_multimodal(item, file_field)

@@ -227,6 +227,7 @@ async def chat_upload_pdf(
     # 2) Read file bytes once
     file_bytes    = await file.read()
     content_type  = file.content_type
+    filename      = file.filename
 
     # 3) Build PromptItem
     item = PromptItem(model=model, chatId=chatId, prompt=prompt)
@@ -234,7 +235,7 @@ async def chat_upload_pdf(
     # 4) Stream via the PDF helper
     try:
         return StreamingResponse(
-            send_pdf_prompt(item, file_bytes, content_type),
+            send_pdf_prompt(item, file_bytes, content_type, filename),
             media_type="text/event-stream"
         )
     except Exception as e:
