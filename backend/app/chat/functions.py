@@ -109,8 +109,16 @@ def generate_chat_title(prompt: str) -> str:
         "max_tokens": 5,
         "temperature": 0.2
     }
-    raw = response.choices[0].message.content or "Untitled Chat"
-    return raw.strip().strip('"')
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        raw = data["choices"][0]["message"]["content"] or "Untitled Chat"
+        return raw.strip().strip('"')
+    except Exception as e:
+        logger.error(f"Error generating chat title: {str(e)}")
+        return "Untitled Chat"
 
 def stream_multimodal(item: PromptItem, file_field: dict):
     url = "https://openrouter.ai/api/v1/chat/completions"
