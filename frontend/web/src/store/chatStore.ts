@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { Chat, Message, PendingFile, MAX_VISIBLE_TABS, MAX_FILES_PER_MESSAGE, MAX_FILE_SIZE, ALLOWED_FILE_TYPES } from '@/types/chat';
+import { OpenRouterModel, OpenRouterResponse } from '@/types/models';
+import toast from 'react-hot-toast';
 
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -9,7 +11,7 @@ function generateUUID(): string {
   });
 }
 
-function getFileType(file: File): 'image' | 'pdf' | 'csv' | null {
+function getFileType(file: File): 'image' | 'pdf' | null {
   const fileType = ALLOWED_FILE_TYPES[file.type as keyof typeof ALLOWED_FILE_TYPES];
   return fileType || null;
 }
@@ -27,6 +29,11 @@ interface ChatState {
   visibleTabIds: string[];
   sidebarTabIds: string[];
   activeChatId: string;
+  models: OpenRouterModel[];
+  modelsLoading: boolean;
+  modelsError: string | null;
+  modelsLoaded: boolean;
+  modelSearch: string;
   setActiveChatId: (id: string) => void;
   handleInputChange: (text: string) => void;
   handleModelChange: (model: string) => void;
@@ -38,6 +45,8 @@ interface ChatState {
   addPendingFiles: (files: FileList | File[]) => Promise<{ success: File[], errors: string[] }>;
   removePendingFile: (fileId: string) => void;
   clearPendingFiles: () => void;
+  fetchModels: () => Promise<void>;
+  setModelSearch: (search: string) => void;
 }
 
 const initialChatId = generateUUID();
@@ -48,12 +57,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
     title: "New Chat", 
     messages: [], 
     input: "",
-    model: "openai/gpt-3.5-turbo",
+    model: "openai/gpt-4o",
     pendingFiles: []
   }],
   visibleTabIds: [initialChatId],
   sidebarTabIds: [],
   activeChatId: initialChatId,
+  models: [],
+  modelsLoading: false,
+  modelsError: null,
+  modelsLoaded: false,
+  modelSearch: '',
 
   setActiveChatId: (id: string) => set({ activeChatId: id }),
 
@@ -73,6 +87,57 @@ export const useChatStore = create<ChatState>((set, get) => ({
         chat.id === activeChatId ? { ...chat, model } : chat
       ),
     });
+  },
+
+  setModelSearch: (search: string) => {
+    set({ modelSearch: search });
+  },
+
+  fetchModels: async () => {
+    const { modelsLoaded, modelsLoading } = get();
+    
+    if (modelsLoaded || modelsLoading) return;
+    
+    set({ modelsLoading: true, modelsError: null });
+    
+    try {
+      const response = await fetch('/api/models');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data: OpenRouterResponse = await response.json();
+      
+      if (data.data && Array.isArray(data.data)) {
+        set({ 
+          models: data.data, 
+          modelsLoading: false, 
+          modelsLoaded: true,
+          modelsError: null 
+        });
+      } else {
+        throw new Error('Invalid response format');
+      }
+    } catch (error) {
+      console.error('Failed to fetch models:', error);
+      
+      const errorMessage = 'Failed to load models. Using GPT-4o as default.';
+      toast.error(errorMessage);
+      
+      set({ 
+        modelsLoading: false, 
+        modelsError: errorMessage,
+        modelsLoaded: true
+      });
+      
+      const { activeChatId, chats } = get();
+      set({
+        chats: chats.map((chat) =>
+          chat.id === activeChatId ? { ...chat, model: "openai/gpt-4o" } : chat
+        ),
+      });
+    }
   },
 
   updateChatTitle: (chatId: string, title: string) => {
@@ -106,7 +171,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const fileType = getFileType(file);
       if (!fileType) {
-        errors.push(`File "${file.name}" is not a supported type. Supported: images, PDFs, CSVs`);
+        errors.push(`File "${file.name}" is not a supported type. Supported: images, PDFs`);
         continue;
       }
 
@@ -237,9 +302,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
           const endpoint = pendingFile.type === 'image' 
             ? '/chat/upload/image' 
-            : pendingFile.type === 'pdf'
-            ? '/chat/upload/pdf'
-            : '/chat/upload/csv';
+            : '/chat/upload/pdf';
 
           const response = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'}${endpoint}`, {
             method: 'POST',
@@ -458,7 +521,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       title: "New Chat",
       messages: [],
       input: "",
-      model: "openai/gpt-3.5-turbo",
+      model: "openai/gpt-4o",
       pendingFiles: []
     };
 

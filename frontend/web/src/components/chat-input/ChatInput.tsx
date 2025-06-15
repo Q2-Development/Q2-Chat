@@ -1,35 +1,120 @@
-import { IoAdd, IoOptionsOutline, IoMic, IoChevronDown, IoClose, IoDocumentText, IoImage } from "react-icons/io5";
-import { FaArrowUp, FaFileCsv } from "react-icons/fa6";
+import { IoAdd, IoOptionsOutline, IoChevronDown, IoClose, IoDocumentText, IoImage, IoSearch } from "react-icons/io5";
+import { FaArrowUp } from "react-icons/fa6";
+import { Zap, Bot, Loader2 } from "lucide-react";
 import styles from "./ChatInput.module.css";
-import { AVAILABLE_MODELS, PendingFile } from "@/types/chat";
-import { useState, useRef, useCallback } from "react";
+import { PendingFile } from "@/types/chat";
+import { OpenRouterModel, getProviderName, POPULAR_MODELS, isPopularModel } from "@/types/models";
+import { PROVIDER_ICONS, getProviderIconKey } from "@/components/provider-icons";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 
 interface ChatInputProps {
     inputValue: string;
     selectedModel: string;
     pendingFiles: PendingFile[];
+    models: OpenRouterModel[];
+    modelsLoading: boolean;
+    modelsError: string | null;
+    modelSearch: string;
     onInputChange: (text: string) => void;
     onModelChange: (model: string) => void;
     onSend: () => void;
     onAddFiles: (files: FileList | File[]) => Promise<{ success: File[], errors: string[] }>;
     onRemoveFile: (fileId: string) => void;
+    onFetchModels: () => Promise<void>;
+    onModelSearch: (search: string) => void;
 }
 
 export const ChatInput = ({ 
     inputValue, 
     selectedModel, 
     pendingFiles,
+    models,
+    modelsLoading,
+    modelsError,
+    modelSearch,
     onInputChange, 
     onSend, 
     onModelChange, 
     onAddFiles,
-    onRemoveFile 
+    onRemoveFile,
+    onFetchModels,
+    onModelSearch
 }: ChatInputProps) => {
     const [showModelDropdown, setShowModelDropdown] = useState(false);
     const [isDragOver, setIsDragOver] = useState(false);
     const [errors, setErrors] = useState<string[]>([]);
-    const selectedModelName = AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name || "GPT-3.5 Turbo";
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const selectedModelInfo = models.find(m => m.id === selectedModel);
+    const selectedModelName = selectedModelInfo?.name || "GPT-4o";
+
+    const { popularModels, groupedModels } = useMemo(() => {
+        let filtered = models;
+        
+        if (modelSearch.trim()) {
+            const searchLower = modelSearch.toLowerCase();
+            filtered = models.filter(model => 
+                model.name.toLowerCase().includes(searchLower)
+            );
+        }
+
+        const popular: OpenRouterModel[] = [];
+        const regular: OpenRouterModel[] = [];
+
+        filtered.forEach(model => {
+            if (isPopularModel(model.id)) {
+                popular.push(model);
+            } else {
+                regular.push(model);
+            }
+        });
+
+        const sortedPopular = popular.sort((a, b) => {
+            const indexA = POPULAR_MODELS.indexOf(a.id as any);
+            const indexB = POPULAR_MODELS.indexOf(b.id as any);
+            return indexA - indexB;
+        });
+
+        const grouped: Record<string, OpenRouterModel[]> = {};
+        regular.forEach(model => {
+            const provider = getProviderName(model.id);
+            if (!grouped[provider]) {
+                grouped[provider] = [];
+            }
+            grouped[provider].push(model);
+        });
+
+        const sortedProviders = Object.keys(grouped).sort();
+        const result: Record<string, OpenRouterModel[]> = {};
+        
+        sortedProviders.forEach(provider => {
+            result[provider] = grouped[provider].sort((a, b) => a.name.localeCompare(b.name));
+        });
+
+        return {
+            popularModels: sortedPopular,
+            groupedModels: result
+        };
+    }, [models, modelSearch]);
+
+    const handleModelDropdownToggle = async () => {
+        if (!showModelDropdown) {
+            await onFetchModels();
+        }
+        setShowModelDropdown(!showModelDropdown);
+    };
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as Element;
+            if (showModelDropdown && !target.closest(`.${styles.modelSelectorContainer}`)) {
+                setShowModelDropdown(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showModelDropdown]);
 
     const handleAddClick = () => {
         fileInputRef.current?.click();
@@ -87,8 +172,6 @@ export const ChatInput = ({
                 return <IoImage size={16} className="text-blue-400" />;
             case 'pdf':
                 return <IoDocumentText size={16} className="text-red-400" />;
-            case 'csv':
-                return <FaFileCsv size={16} className="text-green-400" />;
             default:
                 return <IoDocumentText size={16} className="text-gray-400" />;
         }
@@ -100,6 +183,12 @@ export const ChatInput = ({
         const sizes = ['Bytes', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    };
+
+    const getProviderIconComponent = (modelId: string) => {
+        const iconKey = getProviderIconKey(modelId);
+        const IconComponent = PROVIDER_ICONS[iconKey];
+        return IconComponent ? <IconComponent /> : <Bot size={16} />;
     };
 
     return (
@@ -115,7 +204,7 @@ export const ChatInput = ({
                 ref={fileInputRef}
                 style={{ display: 'none' }}
                 onChange={handleFileChange}
-                accept="image/*,application/pdf,text/csv,application/csv"
+                accept="image/*,application/pdf"
                 multiple
             />
 
@@ -181,7 +270,7 @@ export const ChatInput = ({
                     <div className={styles.dragMessage}>
                         <IoAdd size={32} />
                         <span>Drop files here to upload</span>
-                        <small>Images, PDFs, and CSVs supported</small>
+                        <small>Images, PDFs supported</small>
                     </div>
                 </div>
             )}
@@ -201,9 +290,10 @@ export const ChatInput = ({
                 }}
                 placeholder="Ask anything..."
             />
+            
             <div className={styles.inputMenuContainer}>
                 <div className={styles.leftMenu}>
-                    <button onClick={handleAddClick} className={`${styles.button} ${styles.iconButton} ${styles.addButton}`}>
+                    <button onClick={handleAddClick} className={`${styles.button} ${styles.iconButton}`}>
                         <IoAdd size={24} />
                     </button>
                     <button className={`${styles.button} ${styles.toolsButton}`}>
@@ -211,38 +301,125 @@ export const ChatInput = ({
                         <span>Tools</span>
                     </button>
                 </div>
-                <div className={styles.modelDropdownContainer}>
-                    <button
-                        onClick={() => setShowModelDropdown(!showModelDropdown)}
-                        className={`${styles.button} ${styles.modelDropdownButton}`}
-                    >
-                        <span>{selectedModelName}</span>
-                        <IoChevronDown size={16} className={`${styles.modelDropdownIcon} ${showModelDropdown ? styles.modelDropdownIconOpen : ''}`} />
-                    </button>
-                    
-                    {showModelDropdown && (
-                        <div className={styles.modelDropdownMenu}>
-                            {AVAILABLE_MODELS.map((model) => (
-                                <button
-                                    key={model.id}
-                                    onClick={() => {
-                                        onModelChange(model.id);
-                                        setShowModelDropdown(false);
-                                    }}
-                                    className={`${styles.modelDropdownItem} ${
-                                        selectedModel === model.id ? styles.modelDropdownItemSelected : ''
-                                    }`}
-                                >
-                                    {model.name}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
+
                 <div className={styles.rightMenu}>
-                    <button className={`${styles.button} ${styles.iconButton} ${styles.micButton}`}>
-                        <IoMic size={24} />
-                    </button>
+                    <div className={styles.modelSelectorContainer}>
+                        <button
+                            onClick={handleModelDropdownToggle}
+                            className={`${styles.button} ${styles.modelSelectorButton}`}
+                        >
+                            <span>{selectedModelName}</span>
+                            <IoChevronDown 
+                                size={16} 
+                                className={`${styles.modelDropdownIcon} ${showModelDropdown ? styles.modelDropdownIconOpen : ''}`} 
+                            />
+                        </button>
+                        
+                        {showModelDropdown && (
+                            <div className={styles.modelDropdownMenu}>
+                                <div className={styles.modelSearchContainer}>
+                                    <div className={styles.searchIconContainer}>
+                                        <IoSearch 
+                                            size={16} 
+                                            className={styles.searchIcon}
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="Search models..."
+                                            value={modelSearch}
+                                            onChange={(e) => onModelSearch(e.target.value)}
+                                            className={styles.modelSearchInput}
+                                            autoFocus
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className={styles.modelList}>
+                                    {modelsLoading ? (
+                                        <div className={styles.loadingState}>
+                                            <Loader2 className="animate-spin" size={20} />
+                                            <span style={{ marginLeft: '0.5rem' }}>Loading models...</span>
+                                        </div>
+                                    ) : modelsError ? (
+                                        <div className={styles.errorState}>
+                                            Failed to load models. Using GPT-4o as default.
+                                        </div>
+                                    ) : popularModels.length === 0 && Object.keys(groupedModels).length === 0 ? (
+                                        <div className={styles.loadingState}>
+                                            No models found matching "{modelSearch}"
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {popularModels.length > 0 && (
+                                                <div className={styles.providerGroup}>
+                                                    <div className={styles.providerHeader}>
+                                                        <Zap size={16} />
+                                                        Popular
+                                                    </div>
+                                                    {popularModels.map((model) => (
+                                                        <button
+                                                            key={model.id}
+                                                            onClick={() => {
+                                                                onModelChange(model.id);
+                                                                setShowModelDropdown(false);
+                                                                onModelSearch('');
+                                                            }}
+                                                            className={`${styles.modelItem} ${
+                                                                selectedModel === model.id ? styles.modelItemSelected : ''
+                                                            }`}
+                                                        >
+                                                            <div className={styles.modelName}>{model.name}</div>
+                                                            {model.description && (
+                                                                <div className={styles.modelDescription}>
+                                                                    {model.description.length > 80 
+                                                                        ? `${model.description.substring(0, 80)}...` 
+                                                                        : model.description
+                                                                    }
+                                                                </div>
+                                                            )}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {Object.entries(groupedModels).map(([provider, providerModels]) => (
+                                                <div key={provider} className={styles.providerGroup}>
+                                                    <div className={styles.providerHeader}>
+                                                        {getProviderIconComponent(providerModels[0].id)}
+                                                        {provider}
+                                                    </div>
+                                                    {providerModels.map((model) => (
+                                                        <button
+                                                            key={model.id}
+                                                            onClick={() => {
+                                                                onModelChange(model.id);
+                                                                setShowModelDropdown(false);
+                                                                onModelSearch('');
+                                                            }}
+                                                            className={`${styles.modelItem} ${
+                                                                selectedModel === model.id ? styles.modelItemSelected : ''
+                                                            }`}
+                                                        >
+                                                            <div className={styles.modelName}>{model.name}</div>
+                                                            {model.description && (
+                                                                <div className={styles.modelDescription}>
+                                                                    {model.description.length > 80 
+                                                                        ? `${model.description.substring(0, 80)}...` 
+                                                                        : model.description
+                                                                    }
+                                                                </div>
+                                                            )}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            ))}
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    
                     <button onClick={onSend} className={`${styles.button} ${styles.iconButton}`}>
                         <FaArrowUp size={18} />
                     </button>
