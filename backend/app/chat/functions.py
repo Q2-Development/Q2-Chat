@@ -43,7 +43,7 @@ def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIRes
     logger.info(f"Prompt: {item.prompt}")
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {key if (key != None and key != '') else os.getenv('OPENAI_API_KEY')}",
+        "Authorization": f"Bearer {key if (key != None and key != '') else os.getenv('OPEN_ROUTER_KEY')}",
         "Content-Type": "application/json"
     }
 
