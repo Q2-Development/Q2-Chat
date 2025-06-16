@@ -226,6 +226,7 @@
         opacity: 0;
         transform: translateY(-4px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -422,29 +423,90 @@
     text-align: center;
 }
 
+.storedSecurely {
+    color: #10b981;
+    font-weight: 500;
+}
+
+.deleteButton {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: transparent;
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    color: #ef4444;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.deleteButton:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.7);
+}
+
+.deleteButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.guestWarning {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    color: #f59e0b;
+    font-size: 0.875rem;
+    margin-top: 1rem;
+}
+
+.guestWarning strong {
+    color: #fbbf24;
+}
+
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 @media (max-width: 640px) {
     .container {
         max-width: 100%;
     }
-    
+
     .apiKeyCard {
         padding: 1.5rem;
     }
-    
+
     .cardHeader {
         flex-direction: column;
         align-items: flex-start;
         gap: 1rem;
     }
-    
+
     .actions {
         flex-direction: column;
     }
-    
+
     .benefitsList {
         grid-template-columns: 1fr;
     }
-    
+
     .usageGrid {
         grid-template-columns: repeat(2, 1fr);
     }
@@ -454,11 +516,11 @@
     .errorMessage {
         animation: none;
     }
-    
+
     .saveButton:hover:not(:disabled) {
         transform: none;
     }
-    
+
     .usageItem:hover {
         transform: none;
     }

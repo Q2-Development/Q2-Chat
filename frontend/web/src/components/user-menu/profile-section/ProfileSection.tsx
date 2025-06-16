@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { IoPerson, IoCamera, IoSave, IoRefresh, IoMail, IoCalendar } from 'react-icons/io5';
+import { IoPerson, IoSave, IoMail, IoCalendar } from 'react-icons/io5';
 import { useUserStore } from '@/store/userStore';
 import styles from './ProfileSection.module.css';
 
@@ -10,7 +10,6 @@ export const ProfileSection = () => {
     avatarUrl, 
     isAuthenticated, 
     updateProfile, 
-    generateAvatar 
   } = useUserStore();
   
   const [localUserName, setLocalUserName] = useState(userName);
@@ -34,11 +33,6 @@ export const ProfileSection = () => {
     setLocalUserName(userName);
     setIsEditing(false);
     setHasChanges(false);
-  };
-
-  const handleGenerateNewAvatar = () => {
-    const newAvatar = generateAvatar(userName || user?.email?.split('@')[0] || 'User');
-    updateProfile({ avatarUrl: newAvatar });
   };
 
   const formatDate = (dateString?: string) => {
@@ -101,25 +95,8 @@ export const ProfileSection = () => {
                 <IoPerson size={32} />
               )}
             </div>
-            <button
-              onClick={handleGenerateNewAvatar}
-              className={styles.avatarButton}
-              title="Generate new avatar"
-            >
-              <IoRefresh size={16} />
-            </button>
-          </div>
-          <div className={styles.avatarActions}>
-            <button className={styles.uploadButton}>
-              <IoCamera size={16} />
-              <span>Upload Photo</span>
-            </button>
-            <p className={styles.avatarNote}>
-              JPG, PNG or GIF. Max size 2MB.
-            </p>
           </div>
         </div>
-
         <div className={styles.formSection}>
           <div className={styles.inputGroup}>
             <label className={styles.label}>Display Name</label>

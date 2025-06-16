@@ -9,8 +9,12 @@ import { UserMenu } from "@/components/user-menu";
 import { useChatStore } from "@/store/chatStore";
 import { useUserStore } from "@/store/userStore";
 import { Chat } from "@/types/chat";
+import { useToastListener } from '@/hooks/useToastListener';
+
 
 export default function ChatPage() {
+  useToastListener();
+
   const {
     chats,
     allChats,

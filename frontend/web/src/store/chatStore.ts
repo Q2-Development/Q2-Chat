@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { Chat, Message, PendingFile, MAX_VISIBLE_TABS, MAX_FILES_PER_MESSAGE, MAX_FILE_SIZE, ALLOWED_FILE_TYPES } from '@/types/chat';
 import { OpenRouterModel, OpenRouterResponse } from '@/types/models';
 import toast from 'react-hot-toast';
+import { useUserStore } from './userStore';
+
 
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -16,6 +18,21 @@ function getFileType(file: File): 'image' | 'pdf' | null {
   return fileType || null;
 }
 
+const getInitialModel = () => {
+  if (typeof window !== 'undefined') {
+    try {
+      const savedPreferences = localStorage.getItem('q2-chat-preferences');
+      if (savedPreferences) {
+        const preferences = JSON.parse(savedPreferences);
+        return preferences.defaultModel || "openai/gpt-4o";
+      }
+    } catch (e) {
+      console.error('Error loading preferences for initial model:', e);
+    }
+  }
+  return "openai/gpt-4o";
+}
+
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 Bytes';
   const k = 1024;
@@ -27,6 +44,13 @@ function formatFileSize(bytes: number): string {
 interface BackendChat {
   id: string;
   title: string;
+}
+
+interface DragState {
+  isDragging: boolean;
+  draggedChatId: string | null;
+  draggedFrom: 'tab' | 'sidebar' | null;
+  dropZone: 'tab' | 'sidebar' | null;
 }
 
 interface ChatState {
@@ -44,12 +68,7 @@ interface ChatState {
   isSidebarOpen: boolean;
   chatsLoading: boolean;
   chatsLoaded: boolean;
-  dragState: {
-    isDragging: boolean;
-    draggedChatId: string | null;
-    draggedFrom: 'tab' | 'sidebar' | null;
-    dropZone: 'tab' | 'sidebar' | null;
-  };
+  dragState: DragState;
   setActiveChatId: (id: string) => void;
   handleInputChange: (text: string) => void;
   handleModelChange: (model: string) => void;
@@ -68,7 +87,7 @@ interface ChatState {
   fetchModels: () => Promise<void>;
   setModelSearch: (search: string) => void;
   fetchAllChats: () => Promise<void>;
-  setDragState: (state: Partial<typeof state.dragState>) => void;
+  setDragState: (state: Partial<DragState>) => void;
   clearDragState: () => void;
   handleDragStart: (chatId: string, from: 'tab' | 'sidebar') => void;
   handleDragEnd: () => void;
@@ -83,7 +102,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     title: "New Chat",
     messages: [],
     input: "",
-    model: "openai/gpt-4o",
+    model: getInitialModel(),
     pendingFiles: []
   }],
   allChats: [],
@@ -555,7 +574,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }));
         
         if (isFirstMessage) {
-            get().updateChatTitle(activeChatId, "New Chat");
+            try {
+                const response = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'}/chat/${activeChatId}/title`);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch chat title.');
+                }
+                const data = await response.json();
+                get().renameChat(activeChatId, data.title);
+            } catch (error) {
+                console.error("Failed to fetch and set new chat title:", error);
+                get().renameChat(activeChatId, "New Chat");
+            }
         }
     } catch (error: any) {
         if (error.name === 'AbortError') {
@@ -590,17 +619,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   addNewChat: () => {
     const { chats, visibleTabIds } = get();
+    
+    // Get the user's default model from preferences
+    const userStore = useUserStore.getState();
+    const defaultModel = userStore.preferences.defaultModel || "openai/gpt-4o";
+    
     const newChat: Chat = {
       id: generateUUID(),
       title: "New Chat",
       messages: [],
       input: "",
-      model: "openai/gpt-4o",
+      model: defaultModel, // Use user's preferred default model
       pendingFiles: []
     };
     
     const allChats = [...chats, newChat];
-
+  
     if (visibleTabIds.length >= MAX_VISIBLE_TABS) {
       const newVisible = [...visibleTabIds.slice(1), newChat.id];
       set({

@@ -1,18 +1,32 @@
 import { IoSettings, IoSave, IoRefresh, IoVolumeHigh, IoVolumeOff,  IoMoon, IoSunny, IoKeypad } from 'react-icons/io5';
 import { useUserStore } from '@/store/userStore';
 import { useChatStore } from '@/store/chatStore';
+import { ModelSelector } from '@/components/model-selector';
 import styles from './PreferencesSection.module.css';
 
 export const PreferencesSection = () => {
-  const { preferences, updatePreferences } = useUserStore();
-  const { models } = useChatStore();
+  const { 
+    preferences, 
+    updatePreferences, 
+    preferencesLoading,
+    isAuthenticated 
+  } = useUserStore();
+  
+  const { 
+    models, 
+    modelsLoading, 
+    modelsError, 
+    modelSearch,
+    fetchModels,
+    setModelSearch 
+  } = useChatStore();
 
-  const handlePreferenceChange = (key: keyof typeof preferences, value: any) => {
-    updatePreferences({ [key]: value });
+  const handlePreferenceChange = async (key: keyof typeof preferences, value: any) => {
+    await updatePreferences({ [key]: value });
   };
 
-  const handleResetToDefaults = () => {
-    updatePreferences({
+  const handleResetToDefaults = async () => {
+    await updatePreferences({
       defaultModel: 'openai/gpt-4o',
       messageDisplay: 'comfortable',
       autoSave: true,
@@ -22,17 +36,17 @@ export const PreferencesSection = () => {
     });
   };
 
-  const getModelName = (modelId: string) => {
-    const model = models.find(m => m.id === modelId);
-    return model?.name || modelId;
-  };
-
   return (
     <div className={styles.container}>
       <div className={styles.header}>
         <h2 className={styles.title}>Preferences</h2>
         <p className={styles.subtitle}>
           Customize your Q2 Chat experience with these settings
+          {!isAuthenticated && (
+            <span className={styles.guestNote}>
+              {' '}(Sign in to sync across devices)
+            </span>
+          )}
         </p>
       </div>
 
@@ -41,26 +55,27 @@ export const PreferencesSection = () => {
           <div className={styles.settingHeader}>
             <h3 className={styles.settingTitle}>Default Model</h3>
             <p className={styles.settingDescription}>
-              Choose the AI model that will be selected by default for new chats
+              Choose the AI model that will be selected by default for new chats. 
+              Hover over models to see their capabilities and pricing.
             </p>
           </div>
           <div className={styles.settingControl}>
-            <select
+            <ModelSelector
               value={preferences.defaultModel}
-              onChange={(e) => handlePreferenceChange('defaultModel', e.target.value)}
-              className={styles.select}
-            >
-              <option value="openai/gpt-4o">GPT-4o (Recommended)</option>
-              <option value="openai/gpt-4o-mini">GPT-4o Mini (Fast)</option>
-              <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
-              <option value="anthropic/claude-3-haiku">Claude 3 Haiku</option>
-              <option value="google/gemini-pro">Gemini Pro</option>
-              {models.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.name}
-                </option>
-              ))}
-            </select>
+              onChange={(model) => handlePreferenceChange('defaultModel', model)}
+              models={models}
+              modelsLoading={modelsLoading}
+              modelsError={modelsError}
+              modelSearch={modelSearch}
+              onModelSearch={setModelSearch}
+              onFetchModels={fetchModels}
+              mode="inline"
+              placeholder="Select default model"
+              showTooltips={true}
+              disabled={preferencesLoading}
+              label=""
+              showTools={true}
+            />
           </div>
         </div>
 
@@ -81,6 +96,7 @@ export const PreferencesSection = () => {
                   checked={preferences.messageDisplay === 'compact'}
                   onChange={(e) => handlePreferenceChange('messageDisplay', e.target.value)}
                   className={styles.radioInput}
+                  disabled={preferencesLoading}
                 />
                 <span className={styles.radioCustom}></span>
                 <div className={styles.radioContent}>
@@ -96,6 +112,7 @@ export const PreferencesSection = () => {
                   checked={preferences.messageDisplay === 'comfortable'}
                   onChange={(e) => handlePreferenceChange('messageDisplay', e.target.value)}
                   className={styles.radioInput}
+                  disabled={preferencesLoading}
                 />
                 <span className={styles.radioCustom}></span>
                 <div className={styles.radioContent}>
@@ -121,6 +138,7 @@ export const PreferencesSection = () => {
                 checked={preferences.autoSave}
                 onChange={(e) => handlePreferenceChange('autoSave', e.target.checked)}
                 className={styles.toggleInput}
+                disabled={preferencesLoading}
               />
               <span className={styles.toggleSlider}>
                 <span className={styles.toggleThumb}></span>
@@ -146,6 +164,7 @@ export const PreferencesSection = () => {
                 checked={preferences.soundEnabled}
                 onChange={(e) => handlePreferenceChange('soundEnabled', e.target.checked)}
                 className={styles.toggleInput}
+                disabled={preferencesLoading}
               />
               <span className={styles.toggleSlider}>
                 <span className={styles.toggleThumb}>
@@ -177,6 +196,7 @@ export const PreferencesSection = () => {
                 checked={preferences.keyboardShortcuts}
                 onChange={(e) => handlePreferenceChange('keyboardShortcuts', e.target.checked)}
                 className={styles.toggleInput}
+                disabled={preferencesLoading}
               />
               <span className={styles.toggleSlider}>
                 <span className={styles.toggleThumb}>
@@ -204,6 +224,7 @@ export const PreferencesSection = () => {
                 className={`${styles.themeButton} ${
                   preferences.theme === 'dark' ? styles.themeButtonActive : ''
                 }`}
+                disabled={preferencesLoading}
               >
                 <IoMoon size={20} />
                 <span>Dark</span>
@@ -256,11 +277,20 @@ export const PreferencesSection = () => {
         <button
           onClick={handleResetToDefaults}
           className={styles.resetButton}
+          disabled={preferencesLoading}
         >
           <IoRefresh size={16} />
           <span>Reset to Defaults</span>
         </button>
       </div>
+
+      {preferencesLoading && (
+        <div className={styles.loadingOverlay}>
+          <div className={styles.loadingSpinner}>
+            <IoRefresh size={20} className={styles.spin} />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

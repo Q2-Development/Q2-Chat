@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Dict, Any
 from pydantic import BaseModel
 
 class LoginItem(BaseModel):
@@ -12,3 +12,17 @@ class PromptItem(BaseModel):
 
 class UpdateTitleItem(BaseModel):
     title: str
+
+class UserPreferences(BaseModel):
+    defaultModel: str = "openai/gpt-4o"
+    messageDisplay: str = "comfortable" 
+    autoSave: bool = True
+    soundEnabled: bool = False
+    keyboardShortcuts: bool = True
+    theme: str = "dark"
+
+class UpdatePreferencesItem(BaseModel):
+    preferences: Dict[str, Any]
+
+class UpdateApiKeyItem(BaseModel):
+    apiKey: str

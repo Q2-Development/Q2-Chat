@@ -144,12 +144,12 @@
     transition: transform 0.2s ease;
 }
 
-.radioInput:checked + .radioCustom {
+.radioInput:checked+.radioCustom {
     border-color: #3b82f6;
     background: rgba(59, 130, 246, 0.1);
 }
 
-.radioInput:checked + .radioCustom::after {
+.radioInput:checked+.radioCustom::after {
     transform: translate(-50%, -50%) scale(1);
 }
 
@@ -193,7 +193,7 @@
     align-items: center;
 }
 
-.toggleInput:checked + .toggleSlider {
+.toggleInput:checked+.toggleSlider {
     background: #3b82f6;
 }
 
@@ -212,7 +212,7 @@
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.toggleInput:checked + .toggleSlider .toggleThumb {
+.toggleInput:checked+.toggleSlider .toggleThumb {
     transform: translateX(1.5rem);
     color: #3b82f6;
 }
@@ -369,27 +369,70 @@
     transform: translateY(-1px);
 }
 
+.guestNote {
+    color: #f59e0b;
+    font-weight: 500;
+}
+
+.loadingOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.loadingSpinner {
+    background: #262626;
+    border: 1px solid #404040;
+    border-radius: 0.75rem;
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: white;
+}
+
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 @media (max-width: 768px) {
     .container {
         max-width: 100%;
     }
-    
+
     .settingCard {
         padding: 1.25rem;
     }
-    
+
     .themeSelector {
         flex-direction: column;
     }
-    
+
     .shortcutsGrid {
         grid-template-columns: 1fr;
     }
-    
+
     .radioGroup {
         gap: 0.5rem;
     }
-    
+
     .radioLabel {
         padding: 0.5rem;
     }
@@ -400,11 +443,11 @@
         grid-template-columns: repeat(2, 1fr);
         gap: 0.75rem;
     }
-    
+
     .shortcutItem {
         padding: 0.5rem;
     }
-    
+
     .title {
         font-size: 1.5rem;
     }
@@ -414,19 +457,19 @@
     .settingCard:hover {
         transform: none;
     }
-    
+
     .shortcutItem:hover {
         transform: none;
     }
-    
+
     .resetButton:hover {
         transform: none;
     }
-    
+
     .toggleThumb {
         transition: transform 0.1s ease;
     }
-    
+
     .radioCustom::after {
         transition: transform 0.1s ease;
     }
