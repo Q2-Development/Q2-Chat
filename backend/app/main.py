@@ -161,25 +161,6 @@ def post_key(item: KeyItem):
         logger.error("Error: No user logged in (/key/)")
         raise HTTPException(status_code=401, detail=str(e))
 
-def get_user_and_chat(chatId: str | None):
-    """Determine user (or guest) and ensure chatId exists."""
-    user_resp = supabase.auth.get_user()
-    if not user_resp:
-        logger.info("Guest Mode active")
-        user = create_temp_user().user
-    else:
-        user = user_resp.user
-
-    if not chatId:
-        chatId = str(uuid.uuid4())
-        supabase.table("chats").insert({
-            "id":      chatId,
-            "user_id": user.id,
-            "title":   "New Chat"
-        }).execute()
-
-    return user, chatId
-
 @app.get("/models")
 def get_models():
     headers = {
