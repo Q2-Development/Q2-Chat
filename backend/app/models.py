@@ -10,6 +10,8 @@ class PromptItem(BaseModel):
     chatId: Optional[str] = None
     model: str
     prompt: str
+    web: bool = False
+    max_results: int = 5
 
 class UpdateTitleItem(BaseModel):
     title: str

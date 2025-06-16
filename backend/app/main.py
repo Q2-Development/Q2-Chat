@@ -239,7 +239,7 @@ def chat(item: PromptItem):
 
         # Use normal function if debugging is needed
         # return send_chat_prompt(item, user, messages)
-        return StreamingResponse(send_chat_prompt(item, user, messages, item.key), media_type="text/event-stream")
+        return StreamingResponse(send_chat_prompt(item, user, messages, item.key, item.web, item.max_results), media_type="text/event-stream")
     except Exception as e:
         logger.error(f"Error in /chat endpoint for chat {item.chatId}: {e}", exc_info=True)
         return {"error": str(e)}

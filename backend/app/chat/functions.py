@@ -39,7 +39,8 @@ def get_chat_messages(chatId:str):
         .execute()
 
 # Send chat
-def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIResponse, key: str):
+def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIResponse, key: str, web: bool = False,
+    max_results: int = 5):
     logger.info(f"Prompt: {item.prompt}")
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
@@ -62,13 +63,19 @@ def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIRes
 
     # Actual API payload
     payload = {
-        "model": item.model,
+        "model": item.model + (":online" if web else ""),
         "messages": [
             *messagesInApiFormat,
             {"role": "user", "content": item.prompt}
         ],
         "stream": True
     }
+    
+    if web:
+        payload["plugins"] = [{
+            "id":         "web",
+            "max_results": max_results
+        }]
     print(payload["messages"])
 
     supabase.table("messages") \
