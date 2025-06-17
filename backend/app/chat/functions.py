@@ -62,7 +62,7 @@ def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIRes
     api_key = get_user_api_key(user.id)
     
     headers = {
-        "Authorization": f"Bearer {key if (key != None and key != '') else os.getenv('OPEN_ROUTER_KEY')}",
+        "Authorization": f"Bearer {api_key if (api_key != None and api_key != '') else os.getenv('OPEN_ROUTER_KEY')}",
         "Content-Type": "application/json"
     }
 
@@ -230,5 +230,5 @@ def send_pdf_prompt(item: PromptItem, file_bytes: bytes, content_type: str, file
         }
     }
     # 3. Use the generic multimodal streamer to send the request
-    return stream_multimodal(item, file_field, item.chatId)
-#     return stream_multimodal(item, file_field, user_id)
+    # return stream_multimodal(item, file_field, item.chatId)
+    return stream_multimodal(item, file_field, user_id)
