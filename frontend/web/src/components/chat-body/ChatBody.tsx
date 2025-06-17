@@ -21,7 +21,6 @@ interface Message {
 }
 
 interface CodeProps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   node?: any;
   inline?: boolean;
   className?: string;

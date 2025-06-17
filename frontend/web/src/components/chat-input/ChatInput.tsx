@@ -90,9 +90,7 @@ export const ChatInput = ({
         });
 
         const sortedPopular = popular.sort((a, b) => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const indexA = POPULAR_MODELS.indexOf(a.id as any);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const indexB = POPULAR_MODELS.indexOf(b.id as any);
             return indexA - indexB;
         });

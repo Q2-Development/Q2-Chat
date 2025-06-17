@@ -25,7 +25,6 @@ export interface OpenRouterModel {
     context_length: number;
     hugging_face_id?: string;
     per_request_limits?: {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       [key: string]: any;
     };
     supported_parameters?: string[];
