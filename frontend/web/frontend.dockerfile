@@ -1,9 +1,11 @@
 FROM node:lts-slim
 
-WORKDIR /usr/src/frontend/
+WORKDIR /usr/src/frontend/web
 
-COPY . .
+COPY web/package.json .
 
 RUN npm i
 
-CMD ["npm", "run", "dev"]
+COPY . .
+
+CMD ["npm", "run", "devc"]
