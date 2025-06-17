@@ -7,6 +7,7 @@ import { OpenRouterModel, getProviderName, POPULAR_MODELS, isPopularModel, getMo
 import { PROVIDER_ICONS, getProviderIconKey } from "@/components/provider-icons";
 import { ModelTooltip } from "@/components/model-tooltip";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import Image from "next/image";
 
 interface ChatInputProps {
     inputValue: string;
@@ -89,7 +90,9 @@ export const ChatInput = ({
         });
 
         const sortedPopular = popular.sort((a, b) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const indexA = POPULAR_MODELS.indexOf(a.id as any);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const indexB = POPULAR_MODELS.indexOf(b.id as any);
             return indexA - indexB;
         });
@@ -277,7 +280,7 @@ export const ChatInput = ({
                         <div key={pendingFile.id} className={styles.pendingFileItem}>
                             {pendingFile.type === 'image' ? (
                                 <div className={styles.imagePreview}>
-                                    <img 
+                                    <Image 
                                         src={pendingFile.url} 
                                         alt={pendingFile.file.name}
                                         className={styles.previewImage}
@@ -403,7 +406,7 @@ export const ChatInput = ({
                                         </div>
                                     ) : popularModels.length === 0 && Object.keys(groupedModels).length === 0 ? (
                                         <div className={styles.loadingState}>
-                                            No models found matching "{modelSearch}"
+                                            No models found matching &quot;{modelSearch}&quot;
                                         </div>
                                     ) : (
                                         <>

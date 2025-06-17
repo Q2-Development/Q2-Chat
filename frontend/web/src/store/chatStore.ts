@@ -605,6 +605,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ),
         }));
         
+        if (isFirstMessage) {
+            get().updateChatTitle(activeChatId, "New Chat");
+        }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
         if (error.name === 'AbortError') {
             console.log('Message generation stopped by user.');

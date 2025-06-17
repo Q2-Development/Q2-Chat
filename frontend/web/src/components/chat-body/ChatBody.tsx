@@ -3,8 +3,9 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { IoCopyOutline, IoCheckmark, IoDocumentText, IoImage, IoDownload } from 'react-icons/io5';
 import { FaFileCsv } from "react-icons/fa6";
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import styles from './ChatBody.module.css';
+import Image from 'next/image';
 
 interface Message {
   id: string;
@@ -20,13 +21,14 @@ interface Message {
 }
 
 interface CodeProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   node?: any;
   inline?: boolean;
   className?: string;
   children?: React.ReactNode;
 }
 
-const CodeBlock = ({ node, inline, className, children, ...props }: CodeProps) => {
+const CodeBlock = ({ inline, className, children, ...props }: CodeProps) => {
   const [copied, setCopied] = useState(false);
   const match = /language-(\w+)/.exec(className || '');
   const language = match ? match[1] : 'text';
@@ -134,7 +136,7 @@ const FileDisplay = ({ file }: { file: { type: string; url: string; name: string
     return (
       <div className={styles.messageFileContainer}>
         <div className={styles.messageImagePreview}>
-          <img 
+          <Image 
             src={file.url} 
             alt={file.name}
             className={styles.messagePreviewImage}
@@ -181,7 +183,6 @@ const FileDisplay = ({ file }: { file: { type: string; url: string; name: string
 };
 
 export const ChatBody = ({ messages }: { messages: Message[] }) => {
-  console.log(messages);
   return (
     <div className="wrapper flex overflow-y-auto justify-center py-8 grow">
       <div className="flex-1 flex flex-col p-4 space-y-4 container max-w-[60%] min-h-full grow">
@@ -224,8 +225,7 @@ export const ChatBody = ({ messages }: { messages: Message[] }) => {
                           Array.isArray(firstChild.properties?.className) &&
                           firstChild.properties?.className?.some((cls) => 
                             typeof cls === 'string' && cls.startsWith('language-')
-                          );
-                        
+                          );       
                         const hasBlockElements = node?.children?.some((child: any) => 
                           child?.type === 'element' && 
                           ['div', 'pre', 'blockquote', 'table', 'ul', 'ol', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(child.tagName)
