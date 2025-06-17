@@ -8,7 +8,8 @@ export const ProfileSection = () => {
     user, 
     userName, 
     avatarUrl, 
-    isAuthenticated, 
+    isAuthenticated,
+    isGuest, // Use isGuest to properly identify temporary users
     updateProfile, 
   } = useUserStore();
   
@@ -37,19 +38,17 @@ export const ProfileSection = () => {
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'Unknown';
-    
     try {
       return new Date(dateString).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
+        year: 'numeric', month: 'long', day: 'numeric'
       });
     } catch {
       return 'Unknown';
     }
   };
 
-  if (!isAuthenticated) {
+  // Display this view if the user is a guest (has a temp session but is not signed in)
+  if (isGuest || !isAuthenticated) {
     return (
       <div className={styles.container}>
         <div className={styles.guestState}>
@@ -64,11 +63,11 @@ export const ProfileSection = () => {
           <div className={styles.guestFeatures}>
             <h3 className={styles.featuresTitle}>Sign in to unlock:</h3>
             <ul className={styles.featuresList}>
-              <li>💬 Save and sync conversations</li>
-              <li>🔧 Custom preferences</li>
-              <li>🔑 Personal API keys</li>
-              <li>📱 Cross-device access</li>
-              <li>🎨 Custom themes and settings</li>
+              <li>› Save and sync conversations</li>
+              <li>› Custom preferences</li>
+              <li>› Personal API keys</li>
+              <li>› Cross-device access</li>
+              <li>› Custom themes and settings</li>
             </ul>
           </div>
         </div>
@@ -76,6 +75,7 @@ export const ProfileSection = () => {
     );
   }
 
+  // This view is for fully authenticated users
   return (
     <div className={styles.container}>
       <div className={styles.header}>

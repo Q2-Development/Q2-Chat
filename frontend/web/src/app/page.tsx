@@ -48,12 +48,12 @@ export default function ChatPage() {
     handleDragEnd,
   } = useChatStore();
 
-  const { checkAuthStatus } = useUserStore();
+  const { initializeSession } = useUserStore();
 
   useEffect(() => {
     fetchAllChats();
-    checkAuthStatus();
-  }, [fetchAllChats, checkAuthStatus]);
+    initializeSession();
+  }, [fetchAllChats, initializeSession]);
 
   const activeChat = chats.find((c: Chat) => c.id === activeChatId)!;
 

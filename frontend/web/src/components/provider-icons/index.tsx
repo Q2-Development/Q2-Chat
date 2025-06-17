@@ -1,4 +1,4 @@
-export type ProviderIconComponent = () => JSX.Element;
+export type ProviderIconComponent = () => React.ReactNode;
 
 export interface ProviderIcons {
   [key: string]: ProviderIconComponent;

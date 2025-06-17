@@ -212,13 +212,18 @@ export const ChatBody = ({ messages }: { messages: Message[] }) => {
                       h2: ({ children }) => <h2 className="text-xl font-semibold mb-3 mt-5 first:mt-0 text-white">{children}</h2>,
                       h3: ({ children }) => <h3 className="text-lg font-semibold mb-2 mt-4 first:mt-0 text-white">{children}</h3>,
                       p: ({ children, node }) => {  
-                        const hasOnlyCodeBlock = node?.children?.length === 1 && 
-                          node.children[0]?.type === 'element' && 
-                          node.children[0]?.tagName === 'code';
+                        const firstChild = node?.children?.[0];
+                        const hasOnlyCodeBlock = 
+                          node?.children?.length === 1 && 
+                          firstChild?.type === 'element' && 
+                          firstChild?.tagName === 'code';
                         
-                        const isBlockLevelCode = hasOnlyCodeBlock && 
-                          node.children[0]?.properties?.className?.some((cls: string) => 
-                            cls.startsWith('language-')
+                        const isBlockLevelCode = 
+                          hasOnlyCodeBlock && 
+                          firstChild?.type === 'element' &&
+                          Array.isArray(firstChild.properties?.className) &&
+                          firstChild.properties?.className?.some((cls) => 
+                            typeof cls === 'string' && cls.startsWith('language-')
                           );
                         
                         const hasBlockElements = node?.children?.some((child: any) => 

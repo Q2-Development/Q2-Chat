@@ -59,7 +59,7 @@ export const ChatInput = ({
     });
     
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const tooltipTimeoutRef = useRef<NodeJS.Timeout>();
+    const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     const selectedModelInfo = models.find(m => m.id === selectedModel);
     const selectedModelName = selectedModelInfo?.name || "GPT-4o";
