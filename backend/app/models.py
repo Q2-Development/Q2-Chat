@@ -6,6 +6,14 @@ class LoginItem(BaseModel):
     password: str
 
 class PromptItem(BaseModel):
+    key: Optional[str] = None
     chatId: Optional[str] = None
     model: str
     prompt: str
+
+class UpdateTitleItem(BaseModel):
+    title: str
+
+class KeyItem(BaseModel):
+    key: str
+
