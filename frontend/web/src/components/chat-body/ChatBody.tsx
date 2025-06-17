@@ -1,9 +1,11 @@
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { IoCopyOutline, IoCheckmark } from 'react-icons/io5';
-import { useState, useEffect, useRef } from 'react';
+import { IoCopyOutline, IoCheckmark, IoDocumentText, IoImage, IoDownload } from 'react-icons/io5';
+import { FaFileCsv } from "react-icons/fa6";
+import { useState } from 'react';
 import styles from './ChatBody.module.css';
+import Image from 'next/image';
 
 interface Message {
   id: string;
@@ -11,9 +13,15 @@ interface Message {
   isUser: boolean;
   timestamp: Date;
   isStreaming?: boolean;
+  file?: {
+    type: string;
+    url: string;
+    name: string;
+  };
 }
 
 interface CodeProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   node?: any;
   inline?: boolean;
   className?: string;
@@ -90,13 +98,99 @@ const CodeBlock = ({ className, children, ...props }: CodeProps) => {
   );
 };
 
+const getFileType = (mimeType: string): 'image' | 'pdf' | 'csv' | 'unknown' => {
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType === 'application/pdf') return 'pdf';
+  if (mimeType === 'text/csv' || mimeType === 'application/csv') return 'csv';
+  return 'unknown';
+};
+
+const getFileIcon = (fileType: 'image' | 'pdf' | 'csv' | 'unknown') => {
+  switch (fileType) {
+    case 'image':
+      return <IoImage size={16} className="text-blue-400" />;
+    case 'pdf':
+      return <IoDocumentText size={16} className="text-red-400" />;
+    case 'csv':
+      return <FaFileCsv size={16} className="text-green-400" />;
+    default:
+      return <IoDocumentText size={16} className="text-gray-400" />;
+  }
+};
+
+const formatFileSize = (fileName: string): string => {
+  const extension = fileName.split('.').pop()?.toLowerCase() || '';
+  const typeMap: Record<string, string> = {
+    'pdf': 'PDF',
+    'csv': 'CSV',
+    'jpg': 'JPG',
+    'jpeg': 'JPEG',
+    'png': 'PNG',
+    'gif': 'GIF',
+    'webp': 'WebP'
+  };
+  return typeMap[extension] || 'File';
+};
+
+const FileDisplay = ({ file }: { file: { type: string; url: string; name: string } }) => {
+  const fileType = getFileType(file.type);
+
+  if (fileType === 'image') {
+    return (
+      <div className={styles.messageFileContainer}>
+        <div className={styles.messageImagePreview}>
+          <Image 
+            src={file.url} 
+            alt={file.name}
+            className={styles.messagePreviewImage}
+          />
+          <div className={styles.messageImageOverlay}>
+            <span className={styles.messageFileName}>{file.name}</span>
+            <a
+              href={file.url}
+              download={file.name}
+              className={styles.downloadButton}
+              aria-label="Download file"
+            >
+              <IoDownload size={14} />
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  } else {
+    return (
+      <div className={styles.messageFileContainer}>
+        <div className={styles.messageFileCard}>
+          <div className={styles.messageFileInfo}>
+            {getFileIcon(fileType)}
+            <div className={styles.messageFileDetails}>
+              <span className={styles.messageFileName}>{file.name}</span>
+              <span className={styles.messageFileType}>
+                {formatFileSize(file.name)}
+              </span>
+            </div>
+          </div>
+          <a
+            href={file.url}
+            download={file.name}
+            className={styles.downloadButton}
+            aria-label="Download file"
+          >
+            <IoDownload size={14} />
+          </a>
+        </div>
+      </div>
+    );
+  }
+};
+
 export const ChatBody = ({ messages }: { messages: Message[] }) => {
-  console.log(messages);
   return (
     <div className="wrapper flex overflow-y-auto justify-center py-8 grow">
       <div className="flex-1 flex flex-col p-4 space-y-4 container max-w-[60%] min-h-full grow">
         {messages.length === 0 ? (
-          <p className="text-center flex text-3xl m-auto text-neutral-200">What can I help you with?</p>
+          <p className="text-center flex text-3xl m-auto text-neutral-200">Hi There!</p>
         ) : (
           messages.map((msg) => (
             <div
@@ -107,6 +201,9 @@ export const ChatBody = ({ messages }: { messages: Message[] }) => {
                   : "bg-transparent text-white self-start mr-auto w-full"
               }`}
             >
+              {msg.file && (
+                <FileDisplay file={msg.file} />
+              )}
               {msg.isUser ? (
                 <div className="whitespace-pre-line">{msg.text}</div>
               ) : (
@@ -119,12 +216,25 @@ export const ChatBody = ({ messages }: { messages: Message[] }) => {
                       h2: ({ children }) => <h2 className="text-xl font-semibold mb-3 mt-5 first:mt-0 text-white">{children}</h2>,
                       h3: ({ children }) => <h3 className="text-lg font-semibold mb-2 mt-4 first:mt-0 text-white">{children}</h3>,
                       p: ({ children, node }) => {  
-                        const hasOnlyCodeBlock = node?.children?.length === 1 && 
-                          node.children[0]?.type === 'element' && 
-                          node.children[0]?.tagName === 'code' && 
-                          node.children[0]?.properties?.className?.[0]?.startsWith('language-');
+                        const firstChild = node?.children?.[0];
+                        const hasOnlyCodeBlock = 
+                          node?.children?.length === 1 && 
+                          firstChild?.type === 'element' && 
+                          firstChild?.tagName === 'code';
                         
-                        if (hasOnlyCodeBlock) {
+                        const isBlockLevelCode = 
+                          hasOnlyCodeBlock && 
+                          firstChild?.type === 'element' &&
+                          Array.isArray(firstChild.properties?.className) &&
+                          firstChild.properties?.className?.some((cls) => 
+                            typeof cls === 'string' && cls.startsWith('language-')
+                          );       
+                        const hasBlockElements = node?.children?.some((child: any) => 
+                          child?.type === 'element' && 
+                          ['div', 'pre', 'blockquote', 'table', 'ul', 'ol', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(child.tagName)
+                        );
+                        
+                        if (isBlockLevelCode || hasBlockElements) {
                           return <>{children}</>;
                         }
                         
