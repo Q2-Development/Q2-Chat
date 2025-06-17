@@ -28,7 +28,7 @@ interface CodeProps {
   children?: React.ReactNode;
 }
 
-const CodeBlock = ({ inline, className, children, ...props }: CodeProps) => {
+const CodeBlock = ({ className, children, ...props }: CodeProps) => {
   const [copied, setCopied] = useState(false);
   const match = /language-(\w+)/.exec(className || '');
   const language = match ? match[1] : 'text';
@@ -44,14 +44,17 @@ const CodeBlock = ({ inline, className, children, ...props }: CodeProps) => {
     }
   };
 
-  if (inline) {
+  if (!codeString.includes("\n")) {
     return (
-      <code
-        className="bg-neutral-700 text-red-300 px-1.5 py-0.5 rounded text-sm font-mono"
+      <SyntaxHighlighter
+        style={vscDarkPlus}
+        language={language}
+        customStyle={{display: 'inline-flex', padding: '0.25rem 0.5rem'}}
+        className={`${styles.syntaxhighlighter} rounded-lg !bg-neutral-800 overflow-x-auto`}
         {...props}
       >
-        {children}
-      </code>
+        {codeString}
+      </SyntaxHighlighter>
     );
   }
 
@@ -237,8 +240,8 @@ export const ChatBody = ({ messages }: { messages: Message[] }) => {
                         
                         return <p className="mb-3 last:mb-0 leading-relaxed text-white">{children}</p>;
                       },
-                      ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1 text-white">{children}</ul>,
-                      ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1 text-white">{children}</ol>,
+                      ul: ({ children }) => <ul className="list-disc mb-3 space-y-1 text-white">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal mb-3 space-y-1 text-white">{children}</ol>,
                       li: ({ children }) => <li className="text-white">{children}</li>,
                       blockquote: ({ children }) => (
                         <blockquote className="border-l-4 border-neutral-600 pl-4 italic mb-3 text-neutral-300">
