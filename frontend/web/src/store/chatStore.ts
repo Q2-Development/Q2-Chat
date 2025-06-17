@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { Chat, Message, PendingFile, MAX_VISIBLE_TABS, MAX_FILES_PER_MESSAGE, MAX_FILE_SIZE, ALLOWED_FILE_TYPES } from '@/types/chat';
 import { OpenRouterModel, OpenRouterResponse } from '@/types/models';
 import toast from 'react-hot-toast';
+import { useUserStore } from './userStore';
+
 
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -16,6 +18,21 @@ function getFileType(file: File): 'image' | 'pdf' | null {
   return fileType || null;
 }
 
+const getInitialModel = () => {
+  if (typeof window !== 'undefined') {
+    try {
+      const savedPreferences = localStorage.getItem('q2-chat-preferences');
+      if (savedPreferences) {
+        const preferences = JSON.parse(savedPreferences);
+        return preferences.defaultModel || "openai/gpt-4o";
+      }
+    } catch (e) {
+      console.error('Error loading preferences for initial model:', e);
+    }
+  }
+  return "openai/gpt-4o";
+}
+
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 Bytes';
   const k = 1024;
@@ -24,10 +41,22 @@ function formatFileSize(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
+interface BackendChat {
+  id: string;
+  title: string;
+}
+
+interface DragState {
+  isDragging: boolean;
+  draggedChatId: string | null;
+  draggedFrom: 'tab' | 'sidebar' | null;
+  dropZone: 'tab' | 'sidebar' | null;
+}
+
 interface ChatState {
   chats: Chat[];
+  allChats: Chat[];
   visibleTabIds: string[];
-  sidebarTabIds: string[];
   activeChatId: string;
   models: OpenRouterModel[];
   modelsLoading: boolean;
@@ -36,6 +65,10 @@ interface ChatState {
   modelSearch: string;
   isSendingMessage: boolean;
   abortController: AbortController | null;
+  isSidebarOpen: boolean;
+  chatsLoading: boolean;
+  chatsLoaded: boolean;
+  dragState: DragState;
   setActiveChatId: (id: string) => void;
   handleInputChange: (text: string) => void;
   handleModelChange: (model: string) => void;
@@ -44,29 +77,39 @@ interface ChatState {
   addNewChat: () => void;
   closeChat: (chatId: string) => void;
   renameChat: (chatId: string, newTitle: string) => void;
+  toggleSidebar: () => void;
   moveFromSidebar: (chatId: string) => void;
+  moveToSidebar: (chatId: string) => void;
   updateChatTitle: (chatId: string, title: string) => void;
   addPendingFiles: (files: FileList | File[]) => Promise<{ success: File[], errors: string[] }>;
   removePendingFile: (fileId: string) => void;
   clearPendingFiles: () => void;
   fetchModels: () => Promise<void>;
   setModelSearch: (search: string) => void;
+  fetchAllChats: () => Promise<void>;
+  setDragState: (state: Partial<DragState>) => void;
+  clearDragState: () => void;
+  handleDragStart: (chatId: string, from: 'tab' | 'sidebar') => void;
+  handleDragEnd: () => void;
+  handleDrop: (chatId: string, to: 'tab' | 'sidebar') => void;
+  createRemoteChat: (chat: Chat) => Promise<Chat | null>;
 }
 
 const initialChatId = generateUUID();
 
 export const useChatStore = create<ChatState>((set, get) => ({
-  chats: [{ 
-    id: initialChatId, 
-    title: "New Chat", 
-    messages: [], 
+  chats: [{
+    id: initialChatId,
+    title: "New Chat",
+    messages: [],
     input: "",
-    model: "openai/gpt-4o",
+    model: getInitialModel(),
     pendingFiles: []
   }],
+  allChats: [],
   visibleTabIds: [initialChatId],
-  sidebarTabIds: [],
   activeChatId: initialChatId,
+  isSidebarOpen: false,
   models: [],
   modelsLoading: false,
   modelsError: null,
@@ -74,8 +117,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   modelSearch: '',
   isSendingMessage: false,
   abortController: null,
+  chatsLoading: false,
+  chatsLoaded: false,
+  dragState: {
+    isDragging: false,
+    draggedChatId: null,
+    draggedFrom: null,
+    dropZone: null,
+  },
 
   setActiveChatId: (id: string) => set({ activeChatId: id }),
+  toggleSidebar: () => set(state => ({ isSidebarOpen: !state.isSidebarOpen })),
 
   handleInputChange: (text: string) => {
     const { activeChatId, chats } = get();
@@ -99,44 +151,136 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ modelSearch: search });
   },
 
-  fetchModels: async () => {
-    const { modelsLoaded, modelsLoading } = get();
-    
-    if (modelsLoaded || modelsLoading) return;
-    
-    set({ modelsLoading: true, modelsError: null });
-    
+  fetchAllChats: async () => {
+    const { chatsLoaded, chatsLoading } = get();
+    if (chatsLoaded || chatsLoading) return;
+    set({ chatsLoading: true });
     try {
-      const response = await fetch('/api/models');
-      
+      const response = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'}/chats`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+      const backendChats: BackendChat[] = await response.json();
+      const { chats: currentChats } = get();
+      const allChats: Chat[] = [];
+      for (const backendChat of backendChats) {
+        const existingChat = currentChats.find(c => c.id === backendChat.id);
+        if (existingChat) {
+          allChats.push({ ...existingChat, title: backendChat.title });
+        } else {
+          allChats.push({
+            id: backendChat.id,
+            title: backendChat.title,
+            messages: [],
+            input: "",
+            model: "openai/gpt-4o",
+            pendingFiles: []
+          });
+        }
+      }
+      currentChats.forEach(chat => {
+        if (!backendChats.find(bc => bc.id === chat.id)) {
+          allChats.push(chat);
+        }
+      });
+      set({
+        allChats,
+        chats: allChats,
+        chatsLoading: false,
+        chatsLoaded: true
+      });
+    } catch (error) {
+      console.error('Failed to fetch chats:', error);
+      set({
+        chatsLoading: false,
+        chatsLoaded: true
+      });
+    }
+  },
+
+  setDragState: (newState) => {
+    set(state => ({
+      dragState: { ...state.dragState, ...newState }
+    }));
+  },
+
+  clearDragState: () => {
+    set({
+      dragState: {
+        isDragging: false,
+        draggedChatId: null,
+        draggedFrom: null,
+        dropZone: null,
+      }
+    });
+  },
+
+  handleDragStart: (chatId: string, from: 'tab' | 'sidebar') => {
+    get().setDragState({
+      isDragging: true,
+      draggedChatId: chatId,
+      draggedFrom: from
+    });
+  },
+
+  handleDragEnd: () => {
+    const { dragState } = get();
+    if (dragState.dropZone && dragState.draggedChatId) {
+      get().handleDrop(dragState.draggedChatId, dragState.dropZone);
+    }
+    get().clearDragState();
+  },
+
+  handleDrop: (chatId: string, to: 'tab' | 'sidebar') => {
+    if (to === 'tab') {
+      get().moveFromSidebar(chatId);
+    } else {
+      get().moveToSidebar(chatId);
+    }
+  },
+
+  moveToSidebar: (chatId: string) => {
+    const { visibleTabIds, activeChatId } = get();
+    const newVisibleTabIds = visibleTabIds.filter(id => id !== chatId);
+    let newActiveChatId = activeChatId;
+    if (activeChatId === chatId && newVisibleTabIds.length > 0) {
+      newActiveChatId = newVisibleTabIds[newVisibleTabIds.length - 1];
+    }
+    set({
+      visibleTabIds: newVisibleTabIds,
+      activeChatId: newActiveChatId
+    });
+  },
+
+  fetchModels: async () => {
+    const { modelsLoaded, modelsLoading } = get();
+    if (modelsLoaded || modelsLoading) return;
+    set({ modelsLoading: true, modelsError: null });
+    try {
+      const response = await fetch('/api/models');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       const data: OpenRouterResponse = await response.json();
-      
       if (data.data && Array.isArray(data.data)) {
-        set({ 
-          models: data.data, 
-          modelsLoading: false, 
+        set({
+          models: data.data,
+          modelsLoading: false,
           modelsLoaded: true,
-          modelsError: null 
+          modelsError: null
         });
       } else {
         throw new Error('Invalid response format');
       }
     } catch (error) {
       console.error('Failed to fetch models:', error);
-      
       const errorMessage = 'Failed to load models. Using GPT-4o as default.';
       toast.error(errorMessage);
-      
-      set({ 
-        modelsLoading: false, 
+      set({
+        modelsLoading: false,
         modelsError: errorMessage,
         modelsLoaded: true
       });
-      
       const { activeChatId, chats } = get();
       set({
         chats: chats.map((chat) =>
@@ -149,6 +293,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   updateChatTitle: (chatId: string, title: string) => {
     set({
       chats: get().chats.map((chat) =>
+        chat.id === chatId ? { ...chat, title } : chat
+      ),
+      allChats: get().allChats.map((chat) =>
         chat.id === chatId ? { ...chat, title } : chat
       ),
     });
@@ -282,11 +429,61 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  createRemoteChat: async (chatToCreate: Chat): Promise<Chat | null> => {
+    const firstUserMessage = chatToCreate.messages.find(m => m.isUser);
+    if (!firstUserMessage) return null;
+
+    try {
+      const response = await fetch('/api/chat/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: chatToCreate.model,
+          message: firstUserMessage.text,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create chat on server.');
+      }
+      
+      const newChatFromBackend: Chat = await response.json();
+      
+      set(state => {
+        const otherChats = state.chats.filter(c => c.id !== chatToCreate.id);
+        const updatedChat = {
+          ...newChatFromBackend,
+          messages: [firstUserMessage], // Start with just the user message
+        };
+        return {
+          chats: [...otherChats, updatedChat],
+          allChats: [...otherChats, updatedChat],
+          activeChatId: newChatFromBackend.id,
+          visibleTabIds: state.visibleTabIds.map(id => id === chatToCreate.id ? newChatFromBackend.id : id),
+        }
+      });
+      
+      toast.success(`Chat "${newChatFromBackend.title}" created!`);
+      return newChatFromBackend;
+
+    } catch (error: any) {
+      console.error('Error creating remote chat:', error);
+      toast.error(error.message);
+      set(state => ({
+        chats: state.chats.filter(c => c.id !== chatToCreate.id),
+      }));
+      return null;
+    }
+  },
+
   handleSendMessage: async () => {
-    const { activeChatId, chats, isSendingMessage } = get();
+    const { activeChatId, chats, isSendingMessage, createRemoteChat } = get();
+    const { isAuthenticated, openRouterApiKey } = useUserStore.getState();
+
     if (isSendingMessage) return;
 
-    const activeChat = chats.find((c) => c.id === activeChatId);
+    let activeChat = chats.find((c) => c.id === activeChatId);
     if (!activeChat || (!activeChat.input.trim() && activeChat.pendingFiles.length === 0)) {
         return;
     }
@@ -295,40 +492,58 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ isSendingMessage: true, abortController: controller });
 
     const isFirstMessage = activeChat.messages.length === 0;
-    const originalInput = activeChat.input;
+    const originalInput = activeChat.input.trim();
     const originalPendingFiles = [...activeChat.pendingFiles];
 
+    // This is the message object that will be used for both optimistic updates and the API call
     const userMessage: Message = {
-        id: generateUUID(),
-        text: originalInput.trim(),
-        isUser: true,
-        timestamp: new Date(),
+      id: generateUUID(),
+      text: originalInput,
+      isUser: true,
+      timestamp: new Date(),
     };
 
-    if (originalPendingFiles.length > 0) {
-        userMessage.file = {
-            url: originalPendingFiles[0].url,
-            type: originalPendingFiles[0].file.type,
-            name: originalPendingFiles[0].file.name,
-        };
-    }
+    // --- Start of New Differentiated Logic ---
+    let chatToStream: Chat | null = activeChat;
 
+    if (isAuthenticated && isFirstMessage) {
+        // Authenticated user, first message: create chat on backend first.
+        const optimisticChat = { ...activeChat, messages: [userMessage] };
+        chatToStream = await createRemoteChat(optimisticChat);
+
+        if (!chatToStream) {
+            // Creation failed. The error is handled in createRemoteChat. Stop here.
+            set({ isSendingMessage: false, abortController: null });
+            return;
+        }
+    } else {
+        // Guest user OR subsequent message for authenticated user.
+        // Just add the message optimistically to the existing chat state.
+        set(state => ({
+            chats: state.chats.map(c =>
+                c.id === activeChatId
+                    ? {
+                        ...c,
+                        messages: [...c.messages, userMessage],
+                        input: '',
+                        pendingFiles: [],
+                      }
+                    : c
+            ),
+        }));
+    }
+    // --- End of New Differentiated Logic ---
+    
+    // Both flows converge here. Add the streaming assistant message placeholder.
     const assistantMessageId = generateUUID();
     set(state => ({
         chats: state.chats.map(chat =>
-            chat.id === activeChatId
+            chat.id === chatToStream!.id
                 ? {
                     ...chat,
                     messages: [
                         ...chat.messages,
-                        userMessage,
-                        {
-                            id: assistantMessageId,
-                            text: "",
-                            isUser: false,
-                            timestamp: new Date(),
-                            isStreaming: true,
-                        },
+                        { id: assistantMessageId, text: "", isUser: false, timestamp: new Date(), isStreaming: true },
                     ],
                     input: '',
                     pendingFiles: [],
@@ -338,38 +553,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     try {
- 
-        let response: Response;
-
-        if (originalPendingFiles.length > 0) {
-            const pendingFile = originalPendingFiles[0];
-            const formData = new FormData();
-            formData.append('file', pendingFile.file);
-            formData.append('model', activeChat.model);
-            formData.append('chatId', activeChat.id);
-            formData.append('prompt', originalInput.trim() || `Please analyze this ${pendingFile.type} file.`);
-            
-            const endpoint = pendingFile.type === 'image' ? '/chat/upload/image' : '/chat/upload/pdf';
-            response = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'}${endpoint}`, {
-                method: 'POST',
-                body: formData,
-                signal: controller.signal,
-            });
-        } else {
-            response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    message: userMessage.text,
-                    model: activeChat.model,
-                    chatId: activeChatId,
-                }),
-                signal: controller.signal,
-            });
-        }
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: userMessage.text,
+                model: chatToStream!.model,
+                chatId: chatToStream!.id,
+                openRouterApiKey: !isAuthenticated ? openRouterApiKey : undefined,
+            }),
+            signal: controller.signal,
+        });
 
         if (!response.ok || !response.body) {
-            throw new Error(`Server responded with ${response.status}`);
+            const error = await response.json();
+            throw new Error(error.error || `Server responded with ${response.status}`);
         }
 
         const reader = response.body.getReader();
@@ -382,7 +580,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             accumulatedResponse += decoder.decode(value, { stream: true });
             set(state => ({
                 chats: state.chats.map(chat =>
-                    chat.id === activeChatId
+                    chat.id === chatToStream!.id
                         ? {
                             ...chat,
                             messages: chat.messages.map(m =>
@@ -396,7 +594,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         set(state => ({
             chats: state.chats.map(chat =>
-                chat.id === activeChatId
+                chat.id === chatToStream!.id
                     ? {
                         ...chat,
                         messages: chat.messages.map(m =>
@@ -414,56 +612,51 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (error: any) {
         if (error.name === 'AbortError') {
             console.log('Message generation stopped by user.');
-            set(state => ({
-                chats: state.chats.map(chat =>
-                    chat.id === activeChatId
-                        ? {
-                            ...chat,
-                            messages: chat.messages.slice(0, -2),
-                            input: originalInput,
-                            pendingFiles: originalPendingFiles,
-                        }
-                        : chat
-                ),
-            }));
         } else {
             console.error("Error sending message:", error);
             toast.error("An error occurred. Please try again.");
-            set(state => ({
-                chats: state.chats.map(chat =>
-                    chat.id === activeChatId
-                        ? { ...chat, input: originalInput, pendingFiles: originalPendingFiles, messages: chat.messages.slice(0, -2) }
-                        : chat
-                )
-            }));
         }
+        // Revert the assistant's placeholder message on any error
+        set(state => ({
+            chats: state.chats.map(chat =>
+                chat.id === chatToStream!.id
+                    ? { ...chat, messages: chat.messages.filter(m => m.id !== assistantMessageId) }
+                    : chat
+            )
+        }));
     } finally {
         set({ isSendingMessage: false, abortController: null });
     }
   },
 
   addNewChat: () => {
-    const { chats, visibleTabIds, sidebarTabIds } = get();
+    const { chats, visibleTabIds } = get();
+    const userStore = useUserStore.getState();
+    const defaultModel = userStore.preferences.defaultModel || "openai/gpt-4o";
+    
     const newChat: Chat = {
       id: generateUUID(),
       title: "New Chat",
       messages: [],
       input: "",
-      model: "openai/gpt-4o",
+      model: defaultModel,
       pendingFiles: []
     };
-
-    set({ chats: [...chats, newChat] });
-
+    
+    const allChats = [...chats, newChat];
+  
     if (visibleTabIds.length >= MAX_VISIBLE_TABS) {
-      const movedToSidebar = visibleTabIds[0];
+      const newVisible = [...visibleTabIds.slice(1), newChat.id];
       set({
-        visibleTabIds: [...visibleTabIds.slice(1), newChat.id],
-        sidebarTabIds: [movedToSidebar, ...sidebarTabIds],
+        chats: allChats,
+        allChats: allChats,
+        visibleTabIds: newVisible,
         activeChatId: newChat.id,
       });
     } else {
       set({
+        chats: allChats,
+        allChats: allChats,
         visibleTabIds: [...visibleTabIds, newChat.id],
         activeChatId: newChat.id,
       });
@@ -471,7 +664,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   closeChat: (chatId: string) => {
-    const { chats, visibleTabIds, sidebarTabIds, activeChatId } = get();
+    const { chats, visibleTabIds, activeChatId } = get();
     if (chats.length <= 1) return;
 
     const chatToClose = chats.find(c => c.id === chatId);
@@ -481,46 +674,53 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
     }
 
-    const isVisible = visibleTabIds.includes(chatId);
     const newChats = chats.filter((c) => c.id !== chatId);
+    const newAllChats = get().allChats.filter((c) => c.id !== chatId);
     const newVisibleTabIds = visibleTabIds.filter((id) => id !== chatId);
-    const newSidebarTabIds = sidebarTabIds.filter((id) => id !== chatId);
 
-    if (isVisible && sidebarTabIds.length > 0) {
-      const toPromote = sidebarTabIds[0];
-      set({
-        chats: newChats,
-        visibleTabIds: [...newVisibleTabIds, toPromote],
-        sidebarTabIds: sidebarTabIds.slice(1),
-        activeChatId: activeChatId === chatId 
-          ? (newVisibleTabIds.find((id) => id !== chatId) || newChats[0].id)
-          : activeChatId,
-      });
-    } else {
-      set({
-        chats: newChats,
-        visibleTabIds: newVisibleTabIds,
-        sidebarTabIds: newSidebarTabIds,
-        activeChatId: activeChatId === chatId 
-          ? (newVisibleTabIds.find((id) => id !== chatId) || newChats[0].id)
-          : activeChatId,
-      });
+    const sidebarChats = newAllChats.filter(c => !newVisibleTabIds.includes(c.id));
+
+    if (newVisibleTabIds.length < MAX_VISIBLE_TABS && sidebarChats.length > 0) {
+      newVisibleTabIds.push(sidebarChats[0].id);
     }
+
+    let newActiveChatId = activeChatId;
+    if (activeChatId === chatId) {
+      const currentIndex = visibleTabIds.indexOf(chatId);
+      if (newVisibleTabIds.length > 0) {
+        newActiveChatId = newVisibleTabIds[Math.max(0, currentIndex - 1)];
+      } else {
+        newActiveChatId = newChats.length > 0 ? newChats[0].id : '';
+      }
+    }
+
+    set({
+      chats: newChats,
+      allChats: newAllChats,
+      visibleTabIds: newVisibleTabIds,
+      activeChatId: newActiveChatId
+    });
   },
 
   moveFromSidebar: (chatId: string) => {
-    const { visibleTabIds, sidebarTabIds } = get();
+    const { visibleTabIds, chats, allChats } = get();
+    const chatToMove = allChats.find(c => c.id === chatId);
+    if (!chatToMove) return;
+
+    if (!chats.find(c => c.id === chatId)) {
+      set({
+        chats: [...chats, chatToMove]
+      });
+    }
+
     if (visibleTabIds.length >= MAX_VISIBLE_TABS) {
-      const toSidebar = visibleTabIds[0];
       set({
         visibleTabIds: [...visibleTabIds.slice(1), chatId],
-        sidebarTabIds: [toSidebar, ...sidebarTabIds.filter((id) => id !== chatId)],
         activeChatId: chatId,
       });
     } else {
       set({
         visibleTabIds: [...visibleTabIds, chatId],
-        sidebarTabIds: sidebarTabIds.filter((id) => id !== chatId),
         activeChatId: chatId,
       });
     }

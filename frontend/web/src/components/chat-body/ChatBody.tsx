@@ -187,7 +187,7 @@ export const ChatBody = ({ messages }: { messages: Message[] }) => {
     <div className="wrapper flex overflow-y-auto justify-center py-8 grow">
       <div className="flex-1 flex flex-col p-4 space-y-4 container max-w-[60%] min-h-full grow">
         {messages.length === 0 ? (
-          <p className="text-center flex text-3xl m-auto text-neutral-200">What can I help you with?</p>
+          <p className="text-center flex text-3xl m-auto text-neutral-200">Hi There!</p>
         ) : (
           messages.map((msg) => (
             <div
@@ -212,30 +212,20 @@ export const ChatBody = ({ messages }: { messages: Message[] }) => {
                       h1: ({ children }) => <h1 className="text-2xl font-bold mb-4 mt-6 first:mt-0 text-white">{children}</h1>,
                       h2: ({ children }) => <h2 className="text-xl font-semibold mb-3 mt-5 first:mt-0 text-white">{children}</h2>,
                       h3: ({ children }) => <h3 className="text-lg font-semibold mb-2 mt-4 first:mt-0 text-white">{children}</h3>,
-                      p: ({ children, node }) => {
+                      p: ({ children, node }) => {  
                         const firstChild = node?.children?.[0];
-                        const hasOnlyCodeBlock =
-                          node?.children?.length === 1 &&
-                          firstChild?.type === 'element' &&
+                        const hasOnlyCodeBlock = 
+                          node?.children?.length === 1 && 
+                          firstChild?.type === 'element' && 
                           firstChild?.tagName === 'code';
-
-                        const isBlockLevelCode =
-                          hasOnlyCodeBlock &&
-                          firstChild?.type === 'element' && // Type guard for TypeScript
-                          (() => {
-                            const className = firstChild.properties?.className;
-                            const classList = Array.isArray(className)
-                              ? className
-                              : typeof className === 'string'
-                              ? className.split(' ')
-                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                              : [];
-                            return classList.some(
-                              (c: any) => typeof c === 'string' && c.startsWith('language-')
-                            );
-                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                          })();
                         
+                        const isBlockLevelCode = 
+                          hasOnlyCodeBlock && 
+                          firstChild?.type === 'element' &&
+                          Array.isArray(firstChild.properties?.className) &&
+                          firstChild.properties?.className?.some((cls) => 
+                            typeof cls === 'string' && cls.startsWith('language-')
+                          );       
                         const hasBlockElements = node?.children?.some((child: any) => 
                           child?.type === 'element' && 
                           ['div', 'pre', 'blockquote', 'table', 'ul', 'ol', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(child.tagName)
