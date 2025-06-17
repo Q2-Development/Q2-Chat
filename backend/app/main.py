@@ -6,9 +6,8 @@ from postgrest.base_request_builder import APIResponse
 from typing import Optional
 import base64
 from app import (
-    LoginItem, PromptItem, UpdateTitleItem, supabase, get_temp_user,
-    get_chat_messages, send_chat_prompt, generate_chat_title, create_temp_user,
-    send_image_prompt, send_pdf_prompt
+    KeyItem, LoginItem, PromptItem, UpdateTitleItem, fernet, supabase,
+    get_chat_messages, send_chat_prompt, send_pdf_prompt, send_image_prompt, generate_chat_title, create_temp_user
 )
 import uuid
 import requests
@@ -32,9 +31,14 @@ app.add_middleware(
 
 dotenv.load_dotenv()
 
+fernet = fernet
+supabase = supabase
+
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
+
+# Auth Functions
 
 @app.post("/signup")
 def post_signup(item: LoginItem):
@@ -61,10 +65,11 @@ def post_login(item: LoginItem):
         return {"message": "Login successful"}
 
     except gotrue.errors.AuthApiError:
-        return {"error": "Incorrect login credentials"}
+        logger.error("Error: Incorrect credentials (/login/)")
+        raise HTTPException(status_code=401, detail="Error: Incorrect credentials (/login/)")
     
     except AssertionError:
-        return {"error": "Your email and/or password was not inputted"}
+        raise HTTPException(status_code=400, detail="Error: Your email and/or password was not inputted (/login/)")
         
 @app.get("/login_status")
 def get_login_status():
@@ -103,6 +108,78 @@ def get_user_and_chat(chatId: Optional[str]):
     return user, chatId
 
 # Send chat info
+@app.get("/key")
+def get_key():
+    try:
+        user = supabase.auth.get_user()
+        if not user:
+            logger.info("Guest Mode active")
+            user = create_temp_user().user
+        else: 
+            user = user.user
+        
+        keys = supabase.table("keys") \
+            .select("*") \
+            .eq("user_id", user.id) \
+            .execute()
+        
+        if (len(keys.data) >= 1):
+            encryptedKey = keys.data[0]["key"]
+            key = fernet.decrypt(encryptedKey.encode("ascii")).decode("ascii")
+            return key
+        else:
+            return None
+    
+    except Exception as e:
+        logger.error("Error: No user logged in (/key/)")
+        raise HTTPException(status_code=401, detail=str(e))
+    
+@app.post("/key")
+def post_key(item: KeyItem):
+    try:
+        user = supabase.auth.get_user()
+        if not user:
+            logger.info("Guest Mode active")
+            user = create_temp_user().user
+        else: 
+            user = user.user
+        
+        assert (item.key != None and item.key != "")
+
+        key = fernet.encrypt(item.key.encode("ascii")).decode("ascii")
+        
+        supabase.table("keys") \
+            .upsert({"user_id": user.id, "key": key}) \
+            .execute()
+        
+        return True
+    except AssertionError:
+        logger.error("Error: No key was provided (/key/)")
+        raise HTTPException(status_code=400, detail="No key was provided")
+
+    except Exception as e:
+        logger.error("Error: No user logged in (/key/)")
+        raise HTTPException(status_code=401, detail=str(e))
+
+def get_user_and_chat(chatId: str | None):
+    """Determine user (or guest) and ensure chatId exists."""
+    user_resp = supabase.auth.get_user()
+    if not user_resp:
+        logger.info("Guest Mode active")
+        user = create_temp_user().user
+    else:
+        user = user_resp.user
+
+    if not chatId:
+        chatId = str(uuid.uuid4())
+        supabase.table("chats").insert({
+            "id":      chatId,
+            "user_id": user.id,
+            "title":   "New Chat"
+        }).execute()
+
+    return user, chatId
+
 @app.get("/models")
 def get_models():
     headers = {
@@ -113,7 +190,7 @@ def get_models():
     if r.status_code >= 200 and r.status_code <= 299:
         return r.json()  
     else:
-        return {"error": "Failed to retrieve models"}
+        raise HTTPException(status_code=500, detail="Failed to load models")
 
 @app.get("/chats")
 def get_chats():
@@ -131,9 +208,9 @@ def get_chats():
             .execute()
         return chats.data
     
-    except:
-        print("No user logged in")
-        return {"error": "No user logged in"}
+    except Exception as e:
+        logger.error("Error: No user logged in (/chats/)")
+        raise HTTPException(status_code=401, detail=str(e))
 
 @app.post("/chat")
 def chat(item: PromptItem):
@@ -181,7 +258,7 @@ def chat(item: PromptItem):
 
         # Use normal function if debugging is needed
         # return send_chat_prompt(item, user, messages)
-        return StreamingResponse(send_chat_prompt(item, user, messages), media_type="text/event-stream")
+        return StreamingResponse(send_chat_prompt(item, user, messages, item.key), media_type="text/event-stream")
     except Exception as e:
         logger.error(f"Error in /chat endpoint for chat {item.chatId}: {e}", exc_info=True)
         return {"error": str(e)}
