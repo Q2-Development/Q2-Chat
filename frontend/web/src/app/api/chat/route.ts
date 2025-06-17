@@ -1,23 +1,35 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 
 export async function POST(request: Request) {
   try {
-    const { message, model = "openai/gpt-3.5-turbo", chatId } = await request.json();
+    const { message, model, chatId, openRouterApiKey } = await request.json();
+    const cookieStore = await cookies();
+    const tokenCookie = cookieStore.get('sb-access-token');
 
-    const backendResponse = await fetch(`${process.env.FASTAPI_URL || 'http://localhost:8000'}/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    if (tokenCookie) {
+      headers['Authorization'] = `Bearer ${tokenCookie.value}`;
+    }
+
+    const body = {
         model: model,
         prompt: message,
-        chatId: chatId
-      })
+        chatId: chatId,
+        key: openRouterApiKey 
+    };
+
+    const backendResponse = await fetch(`${process.env.FASTAPI_URL || 'http://localhost:8000'}/chat/stream`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body)
     });
 
     if (!backendResponse.ok) {
-      throw new Error(`Backend responded with status: ${backendResponse.status}`);
+      const error = await backendResponse.json();
+      throw new Error(error.detail || `Backend responded with status: ${backendResponse.status}`);
     }
 
     const stream = new ReadableStream({

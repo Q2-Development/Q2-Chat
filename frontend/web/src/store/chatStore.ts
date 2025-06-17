@@ -92,6 +92,7 @@ interface ChatState {
   handleDragStart: (chatId: string, from: 'tab' | 'sidebar') => void;
   handleDragEnd: () => void;
   handleDrop: (chatId: string, to: 'tab' | 'sidebar') => void;
+  createRemoteChat: (chat: Chat) => Promise<Chat | null>;
 }
 
 const initialChatId = generateUUID();
@@ -152,23 +153,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   fetchAllChats: async () => {
     const { chatsLoaded, chatsLoading } = get();
-    
     if (chatsLoaded || chatsLoading) return;
-    
     set({ chatsLoading: true });
-    
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'}/chats`);
-      
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
       const backendChats: BackendChat[] = await response.json();
-      
       const { chats: currentChats } = get();
       const allChats: Chat[] = [];
-      
       for (const backendChat of backendChats) {
         const existingChat = currentChats.find(c => c.id === backendChat.id);
         if (existingChat) {
@@ -184,20 +178,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
           });
         }
       }
-      
       currentChats.forEach(chat => {
         if (!backendChats.find(bc => bc.id === chat.id)) {
           allChats.push(chat);
         }
       });
-      
       set({
         allChats,
         chats: allChats,
         chatsLoading: false,
         chatsLoaded: true
       });
-      
     } catch (error) {
       console.error('Failed to fetch chats:', error);
       set({
@@ -251,12 +242,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   moveToSidebar: (chatId: string) => {
     const { visibleTabIds, activeChatId } = get();
     const newVisibleTabIds = visibleTabIds.filter(id => id !== chatId);
-    
     let newActiveChatId = activeChatId;
     if (activeChatId === chatId && newVisibleTabIds.length > 0) {
       newActiveChatId = newVisibleTabIds[newVisibleTabIds.length - 1];
     }
-    
     set({
       visibleTabIds: newVisibleTabIds,
       activeChatId: newActiveChatId
@@ -265,20 +254,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   fetchModels: async () => {
     const { modelsLoaded, modelsLoading } = get();
-    
     if (modelsLoaded || modelsLoading) return;
-    
     set({ modelsLoading: true, modelsError: null });
-    
     try {
       const response = await fetch('/api/models');
-      
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
       const data: OpenRouterResponse = await response.json();
-      
       if (data.data && Array.isArray(data.data)) {
         set({
           models: data.data,
@@ -291,16 +274,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     } catch (error) {
       console.error('Failed to fetch models:', error);
-      
       const errorMessage = 'Failed to load models. Using GPT-4o as default.';
       toast.error(errorMessage);
-      
       set({
         modelsLoading: false,
         modelsError: errorMessage,
         modelsLoaded: true
       });
-      
       const { activeChatId, chats } = get();
       set({
         chats: chats.map((chat) =>
@@ -449,11 +429,61 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  createRemoteChat: async (chatToCreate: Chat): Promise<Chat | null> => {
+    const firstUserMessage = chatToCreate.messages.find(m => m.isUser);
+    if (!firstUserMessage) return null;
+
+    try {
+      const response = await fetch('/api/chat/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: chatToCreate.model,
+          message: firstUserMessage.text,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create chat on server.');
+      }
+      
+      const newChatFromBackend: Chat = await response.json();
+      
+      set(state => {
+        const otherChats = state.chats.filter(c => c.id !== chatToCreate.id);
+        const updatedChat = {
+          ...newChatFromBackend,
+          messages: [firstUserMessage], // Start with just the user message
+        };
+        return {
+          chats: [...otherChats, updatedChat],
+          allChats: [...otherChats, updatedChat],
+          activeChatId: newChatFromBackend.id,
+          visibleTabIds: state.visibleTabIds.map(id => id === chatToCreate.id ? newChatFromBackend.id : id),
+        }
+      });
+      
+      toast.success(`Chat "${newChatFromBackend.title}" created!`);
+      return newChatFromBackend;
+
+    } catch (error: any) {
+      console.error('Error creating remote chat:', error);
+      toast.error(error.message);
+      set(state => ({
+        chats: state.chats.filter(c => c.id !== chatToCreate.id),
+      }));
+      return null;
+    }
+  },
+
   handleSendMessage: async () => {
-    const { activeChatId, chats, isSendingMessage } = get();
+    const { activeChatId, chats, isSendingMessage, createRemoteChat } = get();
+    const { isAuthenticated, openRouterApiKey } = useUserStore.getState();
+
     if (isSendingMessage) return;
 
-    const activeChat = chats.find((c) => c.id === activeChatId);
+    let activeChat = chats.find((c) => c.id === activeChatId);
     if (!activeChat || (!activeChat.input.trim() && activeChat.pendingFiles.length === 0)) {
         return;
     }
@@ -462,40 +492,58 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ isSendingMessage: true, abortController: controller });
 
     const isFirstMessage = activeChat.messages.length === 0;
-    const originalInput = activeChat.input;
+    const originalInput = activeChat.input.trim();
     const originalPendingFiles = [...activeChat.pendingFiles];
 
+    // This is the message object that will be used for both optimistic updates and the API call
     const userMessage: Message = {
-        id: generateUUID(),
-        text: originalInput.trim(),
-        isUser: true,
-        timestamp: new Date(),
+      id: generateUUID(),
+      text: originalInput,
+      isUser: true,
+      timestamp: new Date(),
     };
 
-    if (originalPendingFiles.length > 0) {
-        userMessage.file = {
-            url: originalPendingFiles[0].url,
-            type: originalPendingFiles[0].file.type,
-            name: originalPendingFiles[0].file.name,
-        };
-    }
+    // --- Start of New Differentiated Logic ---
+    let chatToStream: Chat | null = activeChat;
 
+    if (isAuthenticated && isFirstMessage) {
+        // Authenticated user, first message: create chat on backend first.
+        const optimisticChat = { ...activeChat, messages: [userMessage] };
+        chatToStream = await createRemoteChat(optimisticChat);
+
+        if (!chatToStream) {
+            // Creation failed. The error is handled in createRemoteChat. Stop here.
+            set({ isSendingMessage: false, abortController: null });
+            return;
+        }
+    } else {
+        // Guest user OR subsequent message for authenticated user.
+        // Just add the message optimistically to the existing chat state.
+        set(state => ({
+            chats: state.chats.map(c =>
+                c.id === activeChatId
+                    ? {
+                        ...c,
+                        messages: [...c.messages, userMessage],
+                        input: '',
+                        pendingFiles: [],
+                      }
+                    : c
+            ),
+        }));
+    }
+    // --- End of New Differentiated Logic ---
+    
+    // Both flows converge here. Add the streaming assistant message placeholder.
     const assistantMessageId = generateUUID();
     set(state => ({
         chats: state.chats.map(chat =>
-            chat.id === activeChatId
+            chat.id === chatToStream!.id
                 ? {
                     ...chat,
                     messages: [
                         ...chat.messages,
-                        userMessage,
-                        {
-                            id: assistantMessageId,
-                            text: "",
-                            isUser: false,
-                            timestamp: new Date(),
-                            isStreaming: true,
-                        },
+                        { id: assistantMessageId, text: "", isUser: false, timestamp: new Date(), isStreaming: true },
                     ],
                     input: '',
                     pendingFiles: [],
@@ -505,37 +553,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     try {
-        let response: Response;
-
-        if (originalPendingFiles.length > 0) {
-            const pendingFile = originalPendingFiles[0];
-            const formData = new FormData();
-            formData.append('file', pendingFile.file);
-            formData.append('model', activeChat.model);
-            formData.append('chatId', activeChat.id);
-            formData.append('prompt', originalInput.trim() || `Please analyze this ${pendingFile.type} file.`);
-            
-            const endpoint = pendingFile.type === 'image' ? '/chat/upload/image' : '/chat/upload/pdf';
-            response = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'}${endpoint}`, {
-                method: 'POST',
-                body: formData,
-                signal: controller.signal,
-            });
-        } else {
-            response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    message: userMessage.text,
-                    model: activeChat.model,
-                    chatId: activeChatId,
-                }),
-                signal: controller.signal,
-            });
-        }
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: userMessage.text,
+                model: chatToStream!.model,
+                chatId: chatToStream!.id,
+                openRouterApiKey: !isAuthenticated ? openRouterApiKey : undefined,
+            }),
+            signal: controller.signal,
+        });
 
         if (!response.ok || !response.body) {
-            throw new Error(`Server responded with ${response.status}`);
+            const error = await response.json();
+            throw new Error(error.error || `Server responded with ${response.status}`);
         }
 
         const reader = response.body.getReader();
@@ -548,7 +580,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             accumulatedResponse += decoder.decode(value, { stream: true });
             set(state => ({
                 chats: state.chats.map(chat =>
-                    chat.id === activeChatId
+                    chat.id === chatToStream!.id
                         ? {
                             ...chat,
                             messages: chat.messages.map(m =>
@@ -562,7 +594,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         set(state => ({
             chats: state.chats.map(chat =>
-                chat.id === activeChatId
+                chat.id === chatToStream!.id
                     ? {
                         ...chat,
                         messages: chat.messages.map(m =>
@@ -573,45 +605,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ),
         }));
         
-        if (isFirstMessage) {
-            try {
-                const response = await fetch(`${process.env.NEXT_PUBLIC_FASTAPI_URL || 'http://localhost:8000'}/chat/${activeChatId}/title`);
-                if (!response.ok) {
-                    throw new Error('Failed to fetch chat title.');
-                }
-                const data = await response.json();
-                get().renameChat(activeChatId, data.title);
-            } catch (error) {
-                console.error("Failed to fetch and set new chat title:", error);
-                get().renameChat(activeChatId, "New Chat");
-            }
-        }
     } catch (error: any) {
         if (error.name === 'AbortError') {
             console.log('Message generation stopped by user.');
-            set(state => ({
-                chats: state.chats.map(chat =>
-                    chat.id === activeChatId
-                        ? {
-                            ...chat,
-                            messages: chat.messages.slice(0, -2),
-                            input: originalInput,
-                            pendingFiles: originalPendingFiles,
-                        }
-                        : chat
-                ),
-            }));
         } else {
             console.error("Error sending message:", error);
             toast.error("An error occurred. Please try again.");
-            set(state => ({
-                chats: state.chats.map(chat =>
-                    chat.id === activeChatId
-                        ? { ...chat, input: originalInput, pendingFiles: originalPendingFiles, messages: chat.messages.slice(0, -2) }
-                        : chat
-                )
-            }));
         }
+        // Revert the assistant's placeholder message on any error
+        set(state => ({
+            chats: state.chats.map(chat =>
+                chat.id === chatToStream!.id
+                    ? { ...chat, messages: chat.messages.filter(m => m.id !== assistantMessageId) }
+                    : chat
+            )
+        }));
     } finally {
         set({ isSendingMessage: false, abortController: null });
     }
@@ -619,8 +627,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   addNewChat: () => {
     const { chats, visibleTabIds } = get();
-    
-    // Get the user's default model from preferences
     const userStore = useUserStore.getState();
     const defaultModel = userStore.preferences.defaultModel || "openai/gpt-4o";
     
@@ -629,7 +635,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       title: "New Chat",
       messages: [],
       input: "",
-      model: defaultModel, // Use user's preferred default model
+      model: defaultModel,
       pendingFiles: []
     };
     
@@ -694,7 +700,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   moveFromSidebar: (chatId: string) => {
     const { visibleTabIds, chats, allChats } = get();
-    
     const chatToMove = allChats.find(c => c.id === chatId);
     if (!chatToMove) return;
 

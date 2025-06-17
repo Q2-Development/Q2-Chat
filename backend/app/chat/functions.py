@@ -1,9 +1,9 @@
-from fastapi import UploadFile
 from app.models import PromptItem
 from .prompts import SYSTEM_PROMPT
 from app.auth.supabase_client import supabase
 from postgrest.base_request_builder import APIResponse
 from pathlib import Path
+from typing import Optional
 
 import dotenv
 import os
@@ -12,6 +12,8 @@ import gotrue
 import base64
 import requests
 import logging
+import gotrue
+
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -35,38 +37,43 @@ def get_chat_messages(chatId:str):
         .eq("chat_id", chatId) \
         .execute()
 
-def get_user_api_key(user_id: str) -> str:
+def get_user_api_key(user_id: str) -> Optional[str]:
+    """Fetches and decrypts the user's OpenRouter API key from user_metadata."""
     try:
-        user_data = supabase.table("auth.users").select("raw_user_meta_data").eq("id", user_id).execute()
-        
-        if user_data.data and len(user_data.data) > 0:
-            meta_data = user_data.data[0].get("raw_user_meta_data", {})
-            encrypted_key = meta_data.get("openrouter_api_key")
-            
-            if encrypted_key:
-                try:
+        user_data_res = supabase.auth.admin.get_user_by_id(user_id)
+        if not user_data_res or not user_data_res.user:
+            return None
+
+        meta_data = user_data_res.user.user_metadata or {}
+        encrypted_key = meta_data.get("openrouter_api_key")
+
+        if encrypted_key:
+            try:
+                # The key is stored as a list with one element, handle that
+                if isinstance(encrypted_key, list) and len(encrypted_key) > 0:
+                    encrypted_key = encrypted_key[0]
+                
+                if isinstance(encrypted_key, str):
                     return fernet.decrypt(encrypted_key.encode()).decode()
-                except:
-                    logger.warning(f"Could not decrypt API key for user {user_id}")
+                
+            except Exception as e:
+                logger.warning(f"Could not decrypt API key for user {user_id}: {e}")
+        return None
     except Exception as e:
         logger.error(f"Error getting user API key for {user_id}: {e}")
-    
-    # Fallback to system key
-    return os.getenv('OPEN_ROUTER_KEY')
+        return None
 
-def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIResponse):
-    logger.info(f"Prompt: {item.prompt}")
+def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIResponse, key_override: Optional[str] = None):
+    logger.info(f"Streaming prompt for chat: {item.chatId}")
     url = "https://openrouter.ai/api/v1/chat/completions"
     
-    # Get user's API key or fallback to system key
-    api_key = get_user_api_key(user.id)
+    api_key = key_override or get_user_api_key(user.id) or os.getenv('OPEN_ROUTER_KEY')
     
     headers = {
-        "Authorization": f"Bearer {api_key if (api_key != None and api_key != '') else os.getenv('OPEN_ROUTER_KEY')}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
 
-    # Change the messages from their DB form to a object compatible with the api
     messagesInApiFormat = [
         {"role": message.get("speaker").lower(), "content": message.get("content")} for message in messages.data
     ]
@@ -74,10 +81,9 @@ def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIRes
     if len(messagesInApiFormat) == 0:
         messagesInApiFormat = [{"role": "system", "content": SYSTEM_PROMPT }]
         supabase.table("messages") \
-            .insert({"chat_id": item.chatId, "provider_id": item.model, "content": SYSTEM_PROMPT, "speaker": "System"}) \
+            .insert({"chat_id": item.chatId, "provider_id": item.model, "content": SYSTEM_PROMPT, "speaker": "System", "user_id": user.id}) \
             .execute()
 
-    # Actual API payload
     payload = {
         "model": item.model,
         "messages": [
@@ -88,36 +94,30 @@ def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIRes
     }
 
     supabase.table("messages") \
-        .insert({"chat_id": item.chatId, "provider_id": item.model, "content": item.prompt, "speaker": "User"}) \
+        .insert({"chat_id": item.chatId, "provider_id": item.model, "content": item.prompt, "speaker": "User", "user_id": user.id}) \
         .execute()
     
-    # Stream the response back to the client
     response = []
     with requests.post(url, headers=headers, json=payload, stream=True) as r:
+        r.raise_for_status()
         r.encoding = 'utf-8'
         for line in r.iter_lines(decode_unicode=True):
-            if not line or not line.startswith("data: "):
+            if not line.startswith("data: "):
                 continue
-            data = line[len("data: "):]
-            if data == "[DONE]":
-                print(f'R: {"".join(response)}')
-
-                # Save the assistant's response in the database
-                supabase.table("messages") \
-                    .insert({"chat_id": item.chatId, "provider_id": item.model, "content": "".join(response), "speaker": "Assistant"}) \
-                    .execute()
+            chunk = line[len("data: "):]
+            if chunk == "[DONE]":
                 break
             try:
-                data_obj = json.loads(data)
-                delta = data_obj["choices"][0]["delta"]
-
-                # Get content, handle potential None values
-                content = delta.get("content")
-                if content:
-                    response.append(content)
-                    yield content
-            except json.JSONDecodeError:
+                delta = json.loads(chunk)["choices"][0]["delta"].get("content")
+                if delta:
+                    response.append(delta)
+                    yield delta
+            except Exception:
                 continue
+
+    supabase.table("messages") \
+        .insert({"chat_id": item.chatId, "provider_id": item.model, "content": "".join(response), "speaker": "Assistant", "user_id": user.id}) \
+        .execute()
 
 def generate_chat_title(prompt: str) -> str:
     url = "https://openrouter.ai/api/v1/chat/completions"

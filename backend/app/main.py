@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends
 from fastapi.requests import Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,7 +7,8 @@ from cryptography.fernet import Fernet
 from typing import Optional
 import base64
 from app import (
-    KeyItem, LoginItem, PromptItem, UpdateTitleItem, UserPreferences, UpdatePreferencesItem, UpdateApiKeyItem, supabase, get_temp_user,
+    KeyItem, LoginItem, PromptItem, UpdateTitleItem, ChatResponse, ChatCreationRequest, UserPreferences, UpdatePreferencesItem, UpdateApiKeyItem, ApiKeyStatus,
+    supabase, get_current_user, create_temp_user,
     get_chat_messages, send_chat_prompt, generate_chat_title, create_temp_user,
     send_image_prompt, send_pdf_prompt
 
@@ -119,33 +120,6 @@ def get_user_and_chat(chatId: Optional[str]):
         }).execute()
 
     return user, chatId, is_new_chat
-
-# Send chat info
-@app.get("/key")
-def get_key():
-    try:
-        user = supabase.auth.get_user()
-        if not user:
-            logger.info("Guest Mode active")
-            user = create_temp_user().user
-        else: 
-            user = user.user
-        
-        keys = supabase.table("keys") \
-            .select("*") \
-            .eq("user_id", user.id) \
-            .execute()
-        
-        if (len(keys.data) >= 1):
-            encryptedKey = keys.data[0]["key"]
-            key = fernet.decrypt(encryptedKey.encode("ascii")).decode("ascii")
-            return key
-        else:
-            return None
-    
-    except Exception as e:
-        logger.error("Error: No user logged in (/key/)")
-        raise HTTPException(status_code=401, detail=str(e))
     
 @app.post("/key")
 def post_key(item: KeyItem):
@@ -206,58 +180,138 @@ def get_chats():
         logger.error("Error: No user logged in (/chats/)")
         raise HTTPException(status_code=401, detail=str(e))
 
-@app.post("/chat")
-def chat(item: PromptItem):
+# @app.post("/chat")
+# def chat(item: PromptItem):
+#     try:
+#         # Get the current user to assign the chat to them.
+#         user = supabase.auth.get_user()
+#         if not user:
+#             logger.info("Guest Mode active")
+#             user = create_temp_user().user
+#         else: 
+#             user = user.user
+
+#         # Check if chat exists. If not, create it.
+#         chat_exists = False
+#         if item.chatId:
+#             # More efficient query to check for existence
+#             res = supabase.table("chats").select("id", count='exact').eq("id", item.chatId).execute()
+#             if res.count > 0:
+#                 chat_exists = True
+
+#         if not chat_exists:
+#             # If no chatId provided by client, generate one.
+#             if not item.chatId:
+#                 item.chatId = str(uuid.uuid4())
+            
+#             # Create the chat record.
+#             supabase.table("chats").insert({
+#                 "id": item.chatId, 
+#                 "user_id": user.id, 
+#                 "title": "New Chat"
+#             }).execute()
+            
+#             # Generate a title for the new chat.
+#             try:
+#                 title = generate_chat_title(item.prompt)
+#                 supabase.table("chats").update({"title": title}).eq("id", item.chatId).execute()
+#             except Exception as title_e:
+#                 # Log the error but don't fail the whole request.
+#                 logger.error(f"Could not generate chat title for chat {item.chatId}: {title_e}")
+
+#         # Load messages for context and add the prompt to the db
+#         print(f"ChatID: {item.chatId}")
+#         messages = get_chat_messages(item.chatId)
+#         messages.data.sort(key=lambda m: m.get("created_at"))
+
+#         # Use normal function if debugging is needed
+#         # return send_chat_prompt(item, user, messages)
+#         return StreamingResponse(send_chat_prompt(item, user, messages, item.key), media_type="text/event-stream")
+#         # Pass user to send_chat_prompt (now it will use user's API key)
+# #         return StreamingResponse(send_chat_prompt(item, user, messages), media_type="text/event-stream")
+#     except Exception as e:
+#         logger.error(f"Error in /chat endpoint for chat {item.chatId}: {e}", exc_info=True)
+#         return {"error": str(e)}
+    
+@app.post("/chat/create", response_model=ChatResponse)
+def create_chat(req: ChatCreationRequest, user: gotrue.types.User = Depends(get_current_user)):
+    """
+    Creates a new chat session for an authenticated user.
+    Generates a title and saves the initial message.
+    """
     try:
-        # Get the current user to assign the chat to them.
-        user = supabase.auth.get_user()
-        if not user:
-            logger.info("Guest Mode active")
-            user = create_temp_user().user
-        else: 
-            user = user.user
+        new_chat_id = str(uuid.uuid4())
+        
+        # Generate title based on the first message
+        title = generate_chat_title(req.message)
 
-        # Check if chat exists. If not, create it.
-        chat_exists = False
-        if item.chatId:
-            # More efficient query to check for existence
-            res = supabase.table("chats").select("id", count='exact').eq("id", item.chatId).execute()
-            if res.count > 0:
-                chat_exists = True
+        # Create the chat record
+        chat_insert_res = supabase.table("chats").insert({
+            "id": new_chat_id,
+            "user_id": user.id,
+            "title": title,
+            "model": req.model
+        }).execute()
 
-        if not chat_exists:
-            # If no chatId provided by client, generate one.
-            if not item.chatId:
-                item.chatId = str(uuid.uuid4())
-            
-            # Create the chat record.
-            supabase.table("chats").insert({
-                "id": item.chatId, 
-                "user_id": user.id, 
-                "title": "New Chat"
-            }).execute()
-            
-            # Generate a title for the new chat.
-            try:
-                title = generate_chat_title(item.prompt)
-                supabase.table("chats").update({"title": title}).eq("id", item.chatId).execute()
-            except Exception as title_e:
-                # Log the error but don't fail the whole request.
-                logger.error(f"Could not generate chat title for chat {item.chatId}: {title_e}")
+        if len(chat_insert_res.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to create chat record.")
 
-        # Load messages for context and add the prompt to the db
-        print(f"ChatID: {item.chatId}")
+        # Save the user's first message
+        message_insert_res = supabase.table("messages").insert({
+            "chat_id": new_chat_id,
+            "user_id": user.id,
+            "provider_id": req.model,
+            "content": req.message,
+            "speaker": "User"
+        }).execute()
+        
+        new_chat_data = chat_insert_res.data[0]
+        
+        return ChatResponse(
+            id=new_chat_data['id'],
+            user_id=new_chat_data['user_id'],
+            title=new_chat_data['title'],
+            model=new_chat_data.get('model', req.model),
+            messages=[message_insert_res.data[0]]
+        )
+
+    except Exception as e:
+        logger.error(f"Error in /chat/create: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error while creating chat.")
+    
+@app.post("/chat/stream")
+def stream_chat(item: PromptItem, user: gotrue.types.User = Depends(get_current_user)):
+    try:
+        res = supabase.table("chats").select("id", count='exact').eq("id", item.chatId).eq("user_id", user.id).execute()
+        if res.count == 0:
+            raise HTTPException(status_code=404, detail="Chat not found or access denied")
+        
         messages = get_chat_messages(item.chatId)
         messages.data.sort(key=lambda m: m.get("created_at"))
+        
+        key_override = item.key if item.key else None
 
-        # Use normal function if debugging is needed
-        # return send_chat_prompt(item, user, messages)
-        return StreamingResponse(send_chat_prompt(item, user, messages, item.key), media_type="text/event-stream")
-        # Pass user to send_chat_prompt (now it will use user's API key)
-#         return StreamingResponse(send_chat_prompt(item, user, messages), media_type="text/event-stream")
+        return StreamingResponse(send_chat_prompt(item, user, messages, key_override), media_type="text/event-stream")
+
     except Exception as e:
-        logger.error(f"Error in /chat endpoint for chat {item.chatId}: {e}", exc_info=True)
-        return {"error": str(e)}
+        logger.error(f"Error in /chat/stream for chat {item.chatId}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+# @app.get("/chat/{chat_id}/title")
+# def get_chat_title(chat_id: str):
+#     # Query Supabase for just the title field
+#     resp = supabase.table("chats") \
+#         .select("title") \
+#         .eq("id", chat_id) \
+#         .single() \
+#         .execute()
+
+#     data = getattr(resp, "data", None)
+#     if data is None:
+#         raise HTTPException(status_code=404, detail="Chat not found")
+
+#     # resp.data looks like {"title": "Your Generated Title"}
+#     return {"chatId": chat_id, "title": resp.data["title"]}
     
     
 @app.post("/chat/upload/image")
@@ -331,21 +385,18 @@ async def chat_upload_pdf(
         logger.error("Error in /chat/upload/pdf:", e)
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/chat/{chat_id}/title")
-def get_chat_title(chat_id: str):
-    # Query Supabase for just the title field
-    resp = supabase.table("chats") \
-        .select("title") \
-        .eq("id", chat_id) \
-        .single() \
-        .execute()
+@app.post("/guest/session")
+def post_guest_session():
+    try:
+        guest_session = create_temp_user()
+        if not guest_session or not guest_session.user:
+            raise HTTPException(status_code=500, detail="Could not create guest user.")
+        
+        return guest_session
+    except Exception as e:
+        logger.error(f"Error creating guest session: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not create guest session.")
 
-    data = getattr(resp, "data", None)
-    if data is None:
-        raise HTTPException(status_code=404, detail="Chat not found")
-
-    # resp.data looks like {"title": "Your Generated Title"}
-    return {"chatId": chat_id, "title": resp.data["title"]}
 
 @app.post("/chats/{chat_id}")
 def patch_chat_title(chat_id: str, item: UpdateTitleItem):
