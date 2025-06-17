@@ -29,7 +29,6 @@ kdf = PBKDF2HMAC(
 
 encryption_key = base64.urlsafe_b64encode(kdf.derive(os.getenv("ENCRYPTION_KEY").encode()))
 fernet = Fernet(encryption_key)
-
 def get_chat_messages(chatId:str):
     return supabase.table("messages") \
         .select("*") \
@@ -63,7 +62,7 @@ def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIRes
     api_key = get_user_api_key(user.id)
     
     headers = {
-        "Authorization": f"Bearer {api_key}",
+        "Authorization": f"Bearer {key if (key != None and key != '') else os.getenv('OPEN_ROUTER_KEY')}",
         "Content-Type": "application/json"
     }
 
@@ -230,4 +229,6 @@ def send_pdf_prompt(item: PromptItem, file_bytes: bytes, content_type: str, file
             "file_data": data_url
         }
     }
-    return stream_multimodal(item, file_field, user_id)
+    # 3. Use the generic multimodal streamer to send the request
+    return stream_multimodal(item, file_field, item.chatId)
+#     return stream_multimodal(item, file_field, user_id)

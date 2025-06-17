@@ -6,6 +6,7 @@ class LoginItem(BaseModel):
     password: str
 
 class PromptItem(BaseModel):
+    key: Optional[str] = None
     chatId: Optional[str] = None
     model: str
     prompt: str
@@ -13,6 +14,9 @@ class PromptItem(BaseModel):
 class UpdateTitleItem(BaseModel):
     title: str
 
+class KeyItem(BaseModel):
+    key: str
+      
 class UserPreferences(BaseModel):
     defaultModel: str = "openai/gpt-4o"
     messageDisplay: str = "comfortable" 
