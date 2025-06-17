@@ -90,3 +90,4 @@ yarn-error.*
 
 app-example
 venv/
+w_venv/

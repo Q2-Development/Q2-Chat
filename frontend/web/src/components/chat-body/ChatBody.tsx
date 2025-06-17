@@ -186,7 +186,7 @@ export const ChatBody = ({ messages }: { messages: Message[] }) => {
     <div className="wrapper flex overflow-y-auto justify-center py-8 grow">
       <div className="flex-1 flex flex-col p-4 space-y-4 container max-w-[60%] min-h-full grow">
         {messages.length === 0 ? (
-          <p className="text-center flex text-3xl m-auto text-neutral-200">What can I help you with?</p>
+          <p className="text-center flex text-3xl m-auto text-neutral-200">Hi There!</p>
         ) : (
           messages.map((msg) => (
             <div

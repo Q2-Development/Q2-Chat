@@ -1,9 +1,16 @@
 .tabsContainer {
     display: flex;
-    background-color: #262626; /* neutral-800 */
+    background-color: #262626;
     padding: 0.75rem 1rem 0 1rem;
-    border-bottom: 3px solid #404040; /* neutral-700 */
+    border-bottom: 3px solid #404040;
     max-width: 100%;
+    position: relative;
+    transition: background-color 0.3s ease, border-bottom-color 0.3s ease;
+}
+
+.tabsContainerDropTarget {
+    background-color: rgba(59, 130, 246, 0.1);
+    border-bottom-color: #3b82f6;
 }
 
 .tab {
@@ -14,23 +21,65 @@
     border-top-left-radius: 0.5rem;
     border-top-right-radius: 0.5rem;
     font-size: 0.875rem;
-    transition: background-color 150ms;
-    width: 16rem; /* w-3xs is not a standard tailwind class, assuming a fixed width */
-    min-width: 10rem; /* min-w-xs is not a standard tailwind class, assuming a fixed width */
+    transition: all 0.2s ease;
+    width: 16rem;
+    min-width: 10rem;
     cursor: pointer;
+    position: relative;
+    user-select: none;
+    border: 1px solid transparent;
 }
 
 .tabActive {
-    background-color: #404040; /* neutral-700 */
+    background-color: #404040;
     font-weight: 600;
+    color: white;
+    border-color: #525252;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .tabInactive {
-    background-color: #262626; /* neutral-800 */
+    background-color: #262626;
+    color: #e5e5e5;
 }
 
 .tabInactive:hover {
-    background-color: rgba(64, 64, 64, 0.5); /* neutral-700/50 */
+    background-color: rgba(64, 64, 64, 0.5);
+    transform: translateY(-1px);
+}
+
+.tabDragging {
+    opacity: 0.5;
+    transform: scale(0.95) rotate(2deg);
+    background-color: #404040;
+    border-color: #3b82f6;
+    cursor: grabbing;
+    z-index: 1000;
+}
+
+.tabTitle {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    transition: color 0.2s ease;
+}
+
+.renameInput {
+    background: #1f1f1f;
+    border: 1px solid #3b82f6;
+    border-radius: 0.25rem;
+    color: white;
+    font-size: 0.875rem;
+    padding: 0.25rem 0.5rem;
+    width: 100%;
+    outline: none;
+    font-family: inherit;
+}
+
+.renameInput:focus {
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
 .closeButton {
@@ -38,31 +87,203 @@
     margin-left: auto;
     background: transparent;
     border: none;
-    color: white;
+    color: #a3a3a3;
     cursor: pointer;
+    padding: 0.125rem;
+    border-radius: 0.25rem;
+    transition: all 0.2s ease;
+    opacity: 0;
+    min-width: 1.25rem;
+    min-height: 1.25rem;
+    align-items: center;
+    justify-content: center;
+}
+
+.tab:hover .closeButton {
+    opacity: 1;
+}
+
+.closeButton:hover {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    transform: scale(1.1);
 }
 
 .separator {
     width: 1px;
-    background-color: #737373; /* neutral-500 */
+    background-color: #737373;
     height: 65%;
     align-self: center;
     margin-top: 0.25rem;
+    transition: background-color 0.2s ease;
 }
 
 .addButton {
     background-color: transparent;
-    border: none;
-    color: white;
-    padding: 0.25rem;
+    border: 1px solid #404040;
+    color: #a3a3a3;
+    padding: 0.375rem;
     border-radius: 0.375rem;
     align-self: center;
-    margin-left: 0.25rem;
+    margin-left: 0.5rem;
     cursor: pointer;
     display: flex;
     align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    min-width: 2.25rem;
+    min-height: 2.25rem;
 }
 
 .addButton:hover {
-    background-color: #404040; /* neutral-700 */
-} 
+    background-color: #404040;
+    color: white;
+    border-color: #525252;
+    transform: scale(1.05);
+}
+
+.userSection {
+    margin-left: auto;
+    padding-left: 1rem;
+}
+
+.userButton {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 2rem;
+    padding: 0.375rem 1rem 0.375rem 0.375rem;
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    max-width: 10rem;
+    margin-bottom: 0.3rem;
+}
+
+.userButton:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.userAvatar {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    overflow: hidden;
+    flex-shrink: 0;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.avatarImage {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+.userName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.hamburgerButton {
+    background-color: transparent;
+    border: none;
+    color: #a3a3a3;
+    padding: 0.5rem;
+    margin-right: 0.5rem;
+    border-radius: 50%;
+    align-self: center;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+}
+
+.hamburgerButton:hover {
+    background-color: #404040;
+    color: white;
+    transform: scale(1.05);
+}
+
+.dropIndicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100%;
+    background: linear-gradient(to bottom, rgba(59, 130, 246, 0.2), transparent);
+    border-bottom: 3px solid #3b82f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: pulse 2s infinite;
+    pointer-events: none;
+}
+
+.dropIndicatorContent {
+    background-color: rgba(59, 130, 246, 0.9);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-align: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tab {
+        transition: background-color 0.2s ease;
+    }
+    
+    .tabInactive:hover {
+        transform: none;
+    }
+    
+    .tabDragging {
+        transform: scale(0.95);
+    }
+    
+    .addButton:hover {
+        transform: none;
+    }
+    
+    .hamburgerButton:hover {
+        transform: none;
+    }
+    
+    .closeButton:hover {
+        transform: none;
+    }
+    
+    .dropIndicator {
+        animation: none;
+    }
+}

@@ -3,11 +3,14 @@ from fastapi.requests import Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from postgrest.base_request_builder import APIResponse
+from cryptography.fernet import Fernet
 from typing import Optional
 import base64
 from app import (
-    KeyItem, LoginItem, PromptItem, UpdateTitleItem, fernet, supabase,
-    get_chat_messages, send_chat_prompt, send_pdf_prompt, send_image_prompt, generate_chat_title, create_temp_user
+    KeyItem, LoginItem, PromptItem, UpdateTitleItem, UserPreferences, UpdatePreferencesItem, UpdateApiKeyItem, supabase, get_temp_user,
+    get_chat_messages, send_chat_prompt, generate_chat_title, create_temp_user,
+    send_image_prompt, send_pdf_prompt
+
 )
 import uuid
 import requests
@@ -19,6 +22,11 @@ import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 DEBUG = True
+
+encryption_key = os.getenv("ENCRYPTION_KEY")
+if not encryption_key:
+    raise ValueError("ENCRYPTION_KEY environment variable not set.")
+fernet = Fernet(encryption_key.encode())
 
 app = FastAPI()
 app.add_middleware(
@@ -73,7 +81,10 @@ def post_login(item: LoginItem):
         
 @app.get("/login_status")
 def get_login_status():
-    return supabase.auth.get_user()
+    user = supabase.auth.get_user()
+    if user:
+        return user
+    return {}
 
 @app.get("/logout")
 def get_logout():
@@ -90,12 +101,14 @@ def get_user_and_chat(chatId: Optional[str]):
         user = user_resp.user
 
     chat_exists = False
+    is_new_chat = False
     if chatId:
         res = supabase.table("chats").select("id", count='exact').eq("id", chatId).execute()
         if res.count > 0:
             chat_exists = True
 
     if not chat_exists:
+        is_new_chat = True
         if not chatId:
             chatId = str(uuid.uuid4())
         
@@ -105,7 +118,7 @@ def get_user_and_chat(chatId: Optional[str]):
             "title":   "New Chat"
         }).execute()
 
-    return user, chatId
+    return user, chatId, is_new_chat
 
 # Send chat info
 @app.get("/key")
@@ -240,10 +253,13 @@ def chat(item: PromptItem):
         # Use normal function if debugging is needed
         # return send_chat_prompt(item, user, messages)
         return StreamingResponse(send_chat_prompt(item, user, messages, item.key), media_type="text/event-stream")
+        # Pass user to send_chat_prompt (now it will use user's API key)
+#         return StreamingResponse(send_chat_prompt(item, user, messages), media_type="text/event-stream")
     except Exception as e:
         logger.error(f"Error in /chat endpoint for chat {item.chatId}: {e}", exc_info=True)
         return {"error": str(e)}
-
+    
+    
 @app.post("/chat/upload/image")
 async def chat_upload_image(
     model:     str                = Form(...),
@@ -252,7 +268,15 @@ async def chat_upload_image(
     file:      UploadFile         = File(...)
 ):
     # 1) Lookup or create user + chat
-    user, chatId = get_user_and_chat(chatId)
+    user, chatId, is_new_chat = get_user_and_chat(chatId)
+
+    if is_new_chat:
+        try:
+            title_prompt = prompt if prompt.strip() else f"Image: {file.filename}"
+            title = generate_chat_title(title_prompt)
+            supabase.table("chats").update({"title": title}).eq("id", chatId).execute()
+        except Exception as e:
+            logger.error(f"Could not generate chat title for chat {chatId} (image upload): {e}")
 
     # 2) Read file bytes once
     file_bytes    = await file.read()
@@ -261,16 +285,15 @@ async def chat_upload_image(
     # 3) Build PromptItem
     item = PromptItem(model=model, chatId=chatId, prompt=prompt)
 
-    # 4) Stream via the image helper
+    # 4) Stream via the image helper (now with user_id)
     try:
         return StreamingResponse(
-            send_image_prompt(item, file_bytes, content_type),
+            send_image_prompt(item, file_bytes, content_type, user.id),
             media_type="text/event-stream"
         )
     except Exception as e:
         logger.error("Error in /chat/upload/image:", e)
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/chat/upload/pdf")
 async def chat_upload_pdf(
@@ -280,7 +303,15 @@ async def chat_upload_pdf(
     file:      UploadFile         = File(...)
 ):
     # 1) Lookup or create user + chat
-    user, chatId = get_user_and_chat(chatId)
+    user, chatId, is_new_chat = get_user_and_chat(chatId)
+    
+    if is_new_chat:
+        try:
+            title_prompt = prompt if prompt.strip() else f"PDF: {file.filename}"
+            title = generate_chat_title(title_prompt)
+            supabase.table("chats").update({"title": title}).eq("id", chatId).execute()
+        except Exception as e:
+            logger.error(f"Could not generate chat title for chat {chatId} (pdf upload): {e}")
 
     # 2) Read file bytes once
     file_bytes    = await file.read()
@@ -290,10 +321,10 @@ async def chat_upload_pdf(
     # 3) Build PromptItem
     item = PromptItem(model=model, chatId=chatId, prompt=prompt)
 
-    # 4) Stream via the PDF helper
+    # 4) Stream via the PDF helper (now with user_id)
     try:
         return StreamingResponse(
-            send_pdf_prompt(item, file_bytes, content_type, filename),
+            send_pdf_prompt(item, file_bytes, content_type, filename, user.id),
             media_type="text/event-stream"
         )
     except Exception as e:
@@ -316,14 +347,6 @@ def get_chat_title(chat_id: str):
     # resp.data looks like {"title": "Your Generated Title"}
     return {"chatId": chat_id, "title": resp.data["title"]}
 
-def _maybe_generate_and_set_title(chatId: str, is_new_chat: bool, first_prompt: str):
-    if is_new_chat and first_prompt:
-        try:
-            title = generate_chat_title(first_prompt)
-            supabase.table("chats").update({"title": title}).eq("id", chatId).execute()
-        except Exception as e:
-            logger.error(f"Could not generate chat title for chat {chatId}: {e}")
-
 @app.post("/chats/{chat_id}")
 def patch_chat_title(chat_id: str, item: UpdateTitleItem):
     try:
@@ -340,3 +363,52 @@ def patch_chat_title(chat_id: str, item: UpdateTitleItem):
     except Exception as e:
         logger.error(f"Error updating title for chat {chat_id}: {e}")
         raise HTTPException(status_code=500, detail="Could not update chat title")
+
+@app.post("/user/preferences")
+def update_user_preferences(item: UpdatePreferencesItem):
+    """Update user preferences"""
+    try:
+        user = supabase.auth.get_user()
+        if not user or not user.user:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+        
+        # Get current metadata
+        current_meta = user.user.user_metadata or {}
+        
+        # Update preferences in metadata
+        current_meta["preferences"] = item.preferences
+        
+        # Update user metadata
+        supabase.auth.admin.update_user_by_id(
+            user.user.id,
+            {"user_metadata": current_meta}
+        )
+        
+        return {"message": "Preferences updated successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error updating user preferences: {e}")
+        raise HTTPException(status_code=500, detail="Could not update preferences")
+
+@app.delete("/user/api-key")
+def delete_user_api_key():
+    try:
+        user = supabase.auth.get_user()
+        if not user or not user.user:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+        
+        # Get current metadata
+        current_meta = user.user.user_metadata or {}
+        current_meta.pop("openrouter_api_key", None)
+        
+        # Update user metadata
+        supabase.auth.admin.update_user_by_id(
+            user.user.id,
+            {"user_metadata": current_meta}
+        )
+        
+        return {"message": "API key deleted successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error deleting user API key: {e}")
+        raise HTTPException(status_code=500, detail="Could not delete API key")
