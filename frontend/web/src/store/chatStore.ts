@@ -479,7 +479,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   handleSendMessage: async () => {
     const { activeChatId, chats, isSendingMessage, createRemoteChat } = get();
-    const { isAuthenticated, openRouterApiKey } = useUserStore.getState();
+    // const { isAuthenticated, openRouterApiKey } = useUserStore.getState();
 
     if (isSendingMessage) return;
 
@@ -505,36 +505,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // --- Start of New Differentiated Logic ---
     let chatToStream: Chat | null = activeChat;
+    set(state => ({
+      chats: state.chats.map(c =>
+          c.id === activeChatId
+              ? {
+                  ...c,
+                  messages: [...c.messages, userMessage],
+                  input: '',
+                  pendingFiles: [],
+                }
+              : c
+      ),
+    }));
 
-    if (isAuthenticated && isFirstMessage) {
-        // Authenticated user, first message: create chat on backend first.
-        const optimisticChat = { ...activeChat, messages: [userMessage] };
-        chatToStream = await createRemoteChat(optimisticChat);
-
-        if (!chatToStream) {
-            // Creation failed. The error is handled in createRemoteChat. Stop here.
-            set({ isSendingMessage: false, abortController: null });
-            return;
-        }
-    } else {
-        // Guest user OR subsequent message for authenticated user.
-        // Just add the message optimistically to the existing chat state.
-        set(state => ({
-            chats: state.chats.map(c =>
-                c.id === activeChatId
-                    ? {
-                        ...c,
-                        messages: [...c.messages, userMessage],
-                        input: '',
-                        pendingFiles: [],
-                      }
-                    : c
-            ),
-        }));
-    }
-    // --- End of New Differentiated Logic ---
-    
-    // Both flows converge here. Add the streaming assistant message placeholder.
     const assistantMessageId = generateUUID();
     set(state => ({
         chats: state.chats.map(chat =>
@@ -560,7 +543,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 message: userMessage.text,
                 model: chatToStream!.model,
                 chatId: chatToStream!.id,
-                openRouterApiKey: !isAuthenticated ? openRouterApiKey : undefined,
+                // openRouterApiKey: !isAuthenticated ? openRouterApiKey : undefined,  
             }),
             signal: controller.signal,
         });
@@ -608,7 +591,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (isFirstMessage) {
             get().updateChatTitle(activeChatId, "New Chat");
         }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
         if (error.name === 'AbortError') {
             console.log('Message generation stopped by user.');
@@ -632,7 +614,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   addNewChat: () => {
     const { chats, visibleTabIds } = get();
     const userStore = useUserStore.getState();
-    const defaultModel = userStore.preferences.defaultModel || "openai/gpt-4o";
+    // const defaultModel = userStore.preferences.defaultModel || "openai/gpt-4o";
+    const defaultModel = "openai/gpt-4o";
     
     const newChat: Chat = {
       id: generateUUID(),

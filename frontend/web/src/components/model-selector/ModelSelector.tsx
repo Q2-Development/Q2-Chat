@@ -239,7 +239,7 @@ export const ModelSelector = ({
           </div>
         ) : popularModels.length === 0 && Object.keys(groupedModels).length === 0 ? (
           <div className={styles.loadingState}>
-            No models found matching "{modelSearch}"
+            No models found matching &quot;{modelSearch}&quot;
           </div>
         ) : (
           <>

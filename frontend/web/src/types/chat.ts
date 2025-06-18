@@ -10,7 +10,7 @@ export interface Message {
     name: string;
   };
 }
-
+ 
 export interface PendingFile {
   id: string;
   file: File;

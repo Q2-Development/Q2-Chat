@@ -5,7 +5,7 @@ import { ChatInput } from "@/components/chat-input";
 import { ChatTabs } from "@/components/chat-tabs";
 import { SidebarTabs } from "@/components/sidebar-tabs";
 import { ChatBody } from "@/components/chat-body";
-import { UserMenu } from "@/components/user-menu";
+// import { UserMenu } from "@/components/user-menu";
 import { useChatStore } from "@/store/chatStore";
 import { useUserStore } from "@/store/userStore";
 import { Chat } from "@/types/chat";
@@ -116,7 +116,7 @@ export default function ChatPage() {
         )}
       </div>
 
-      <UserMenu />
+      {/* <UserMenu /> */}
     </div>
   );
 }

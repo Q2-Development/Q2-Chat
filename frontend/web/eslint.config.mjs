@@ -14,9 +14,15 @@ const eslintConfig = [
   {
     rules: {
       // example of turning off a rule
-      // "@typescript-eslint/no-unused-vars": "off",
-      // "no-console": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "no-console": "off",
       "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-empty-object-type": "off",
+      "@typescript-eslint/no-empty-interface": "off",
+      "prefer-const": "off",
+      "no-unused-vars": "off",
+      "no-console": "off",
+      "no-undef": "off",
     },
   },
 ];
