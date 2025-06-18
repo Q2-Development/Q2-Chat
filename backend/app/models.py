@@ -37,7 +37,6 @@ class UpdatePreferencesItem(BaseModel):
 class UpdateApiKeyItem(BaseModel):
     apiKey: str
 
-# --- New Models for Chat Creation ---
 class ChatCreationRequest(BaseModel):
     model: str
     message: str
@@ -57,3 +56,17 @@ class ChatResponse(BaseModel):
     
 class TitleUpdate(BaseModel):
     title: str
+    
+class SignupItem(BaseModel):
+    email: str
+    password: str
+    openrouter_api_key: str
+
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    has_api_key: bool
+    created_at: str
+
+class ValidateApiKeyRequest(BaseModel):
+    api_key: str

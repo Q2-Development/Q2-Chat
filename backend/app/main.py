@@ -4,11 +4,11 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from postgrest.base_request_builder import APIResponse
 from typing import Optional
-import base64
+import httpx
 from app import (
-    LoginItem, PromptItem, TitleUpdate, supabase, create_temp_user,
+    LoginItem, PromptItem, TitleUpdate, SignupItem, ValidateApiKeyRequest, UserResponse, supabase, create_temp_user,
     get_chat_messages, send_chat_prompt, generate_chat_title,
-    send_image_prompt, send_pdf_prompt
+    send_image_prompt, send_pdf_prompt, encryption
 )
 import uuid
 import requests
@@ -37,31 +37,91 @@ def read_root():
     return {"Hello": "World"}
 
 @app.post("/signup")
-def post_signup(item: LoginItem):
-    if (item.email == None or item.email == ""): return None
+async def post_signup(item: SignupItem):
+    if not item.email or not item.password or not item.openrouter_api_key:
+        raise HTTPException(status_code=400, detail="All fields are required")
     
-    response = supabase.auth.sign_up(
-        {
+    if not item.openrouter_api_key.startswith('sk-or-'):
+        raise HTTPException(status_code=400, detail="Invalid API key format")
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://openrouter.ai/api/v1/models",
+                headers={"Authorization": f"Bearer {item.openrouter_api_key}"},
+                timeout=10.0
+            )
+            if response.status_code != 200:
+                raise HTTPException(status_code=400, detail="Invalid OpenRouter API key")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Could not validate API key")
+    
+    encrypted_key = encryption.encrypt_api_key(item.openrouter_api_key)
+    
+    try:
+        response = supabase.auth.sign_up({
             "email": item.email,
-            "password": item.password
-        }
-    )
-    return response.user
+            "password": item.password,
+            "options": {
+                "data": {
+                    "encrypted_api_key": encrypted_key
+                }
+            }
+        })
+        
+        if response.user:
+            # Insert user into public.users table
+            supabase.table("users").insert({
+                "id": response.user.id,
+                "email": response.user.email,
+                "created_at": "now()"
+            }).execute()
+            
+            # Insert API key
+            supabase.table("user_api_keys").insert({
+                "user_id": response.user.id,
+                "encrypted_key": encrypted_key,
+                "created_at": "now()"
+            }).execute()
+            
+            return {"message": "Signup successful", "user": response.user}
+        else:
+            raise HTTPException(status_code=400, detail="Signup failed")
+            
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/login")
 def post_login(item: LoginItem):
     try:
         assert (item.email != None and item.email != "") and (item.password != None and item.password != "")
-        login = supabase.auth.sign_in_with_password(
+        auth_response = supabase.auth.sign_in_with_password(
             {
                 "email": item.email,
                 "password": item.password
             }
         )
-        return {"message": "Login successful"}
+        
+        # Return session data for frontend to use
+        if auth_response.session:
+            return {
+                "message": "Login successful",
+                "session": {
+                    "access_token": auth_response.session.access_token,
+                    "refresh_token": auth_response.session.refresh_token,
+                    "expires_at": auth_response.session.expires_at,
+                    "user": {
+                        "id": auth_response.user.id,
+                        "email": auth_response.user.email,
+                        "is_anonymous": auth_response.user.is_anonymous
+                    }
+                }
+            }
+        else:
+            return {"error": "Failed to create session"}
 
-    except gotrue.errors.AuthApiError:
-        return {"error": "Incorrect login credentials"}
+    except gotrue.errors.AuthApiError as e:
+        return {"error": f"Incorrect login credentials: {e.message}"}
     
     except AssertionError:
         return {"error": "Your email and/or password was not inputted"}
@@ -181,6 +241,7 @@ def chat(item: PromptItem):
             if res.count > 0:
                 chat_exists = True
 
+        generated_title = None
         if not chat_exists:
             # If no chatId provided by client, generate one.
             if not item.chatId:
@@ -195,20 +256,28 @@ def chat(item: PromptItem):
             
             # Generate a title for the new chat.
             try:
-                title = generate_chat_title(item.prompt)
-                supabase.table("chats").update({"title": title}).eq("id", item.chatId).execute()
+                generated_title = generate_chat_title(item.prompt)
+                supabase.table("chats").update({"title": generated_title}).eq("id", item.chatId).execute()
             except Exception as title_e:
                 # Log the error but don't fail the whole request.
                 logger.error(f"Could not generate chat title for chat {item.chatId}: {title_e}")
+                generated_title = "New Chat"
 
         # Load messages for context and add the prompt to the db
         print(f"ChatID: {item.chatId}")
         messages = get_chat_messages(item.chatId)
         messages.data.sort(key=lambda m: m.get("created_at"))
 
-        # Use normal function if debugging is needed
-        # return send_chat_prompt(item, user, messages)
-        return StreamingResponse(send_chat_prompt(item, user, messages), media_type="text/event-stream")
+        # Create the streaming response with headers
+        response = StreamingResponse(send_chat_prompt(item, user, messages), media_type="text/event-stream")
+        
+        # Add headers for new chats
+        if not chat_exists:
+            response.headers["X-Chat-Id"] = item.chatId
+            if generated_title:
+                response.headers["X-Chat-Title"] = generated_title
+        
+        return response
     except Exception as e:
         logger.error(f"Error in /chat endpoint for chat {item.chatId}: {e}", exc_info=True)
         return {"error": str(e)}
@@ -283,3 +352,91 @@ def get_chat_title(chat_id: str):
 
     # resp.data looks like {"title": "Your Generated Title"}
     return {"chatId": chat_id, "title": resp.data["title"]}
+
+
+@app.get("/user/api-key-status")
+async def get_api_key_status(request: Request):
+    # Get the Authorization header
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+    
+    token = auth_header.split(" ")[1]
+    
+    try:
+        # Verify the token with Supabase
+        user = supabase.auth.get_user(token)
+        if not user or not user.user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        result = supabase.table("user_api_keys").select("id").eq("user_id", user.user.id).execute()
+        has_key = len(result.data) > 0 if result.data else False
+        
+        return {"has_api_key": has_key}
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+@app.post("/user/api-key")
+async def update_api_key(api_key_request: ValidateApiKeyRequest, request: Request):
+    # Get the Authorization header
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+    
+    token = auth_header.split(" ")[1]
+    
+    try:
+        # Verify the token with Supabase
+        user = supabase.auth.get_user(token)
+        if not user or not user.user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    if not api_key_request.api_key.startswith('sk-or-'):
+        raise HTTPException(status_code=400, detail="Invalid API key format")
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://openrouter.ai/api/v1/models",
+                headers={"Authorization": f"Bearer {api_key_request.api_key}"},
+                timeout=10.0
+            )
+            if response.status_code != 200:
+                raise HTTPException(status_code=400, detail="Invalid OpenRouter API key")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not validate API key")
+    
+    encrypted_key = encryption.encrypt_api_key(api_key_request.api_key)
+    
+    supabase.table("user_api_keys").upsert({
+        "user_id": user.user.id,
+        "encrypted_key": encrypted_key,
+        "updated_at": "now()"
+    }).execute()
+    
+    return {"message": "API key updated successfully"}
+
+@app.delete("/user/api-key")
+async def delete_api_key(request: Request):
+    # Get the Authorization header
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+    
+    token = auth_header.split(" ")[1]
+    
+    try:
+        # Verify the token with Supabase
+        user = supabase.auth.get_user(token)
+        if not user or not user.user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    try:
+        supabase.table("user_api_keys").delete().eq("user_id", user.user.id).execute()
+        return {"message": "API key deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to delete API key")

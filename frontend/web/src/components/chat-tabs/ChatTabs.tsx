@@ -46,11 +46,9 @@ export const ChatTabs = ({
   const inputRef = useRef<HTMLInputElement>(null);
   
   const { 
-    // setUserMenuOpen, 
-    // isAuthenticated, 
-    // userName, 
-    // avatarUrl, 
-    // user 
+    setUserMenuOpen, 
+    isAuthenticated, 
+    user 
   } = useUserStore();
 
   useEffect(() => {
@@ -111,13 +109,14 @@ export const ChatTabs = ({
   };
 
   const handleUserMenuClick = () => {
-    // setUserMenuOpen(true);
+    setUserMenuOpen(true);
   };
 
   const getDisplayName = () => {
-    // if (isAuthenticated) {
-    //   return userName || user?.email?.split('@')[0] || 'User';
-    // }
+    if (isAuthenticated) {
+      const displayName = user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'User';
+      return displayName.charAt(0).toUpperCase() + displayName.slice(1);
+    }
     return 'Guest';
   };
   
@@ -206,11 +205,11 @@ export const ChatTabs = ({
           title={`Settings - ${getDisplayName()}`}
         >
           <div className={styles.userAvatar}>
-            {/* {avatarUrl ? (
-              <img src={avatarUrl} alt="Profile" className={styles.avatarImage} />
+            {user?.user_metadata?.avatar_url ? (
+              <img src={user.user_metadata.avatar_url} alt="Profile" className={styles.avatarImage} />
             ) : (
               <IoPerson size={18} />
-            )} */}
+            )}
           </div>
           <span className={styles.userName}>{getDisplayName()}</span>
         </button>
