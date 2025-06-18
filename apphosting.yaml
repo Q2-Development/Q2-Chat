@@ -1,0 +1,24 @@
+# Settings for Cloud Run
+runConfig:
+  minInstances: 2
+  maxInstances: 2
+  concurrency: 100
+  cpu: 2
+  memoryMiB: 1024
+
+# Environment variables and secrets
+env:
+  - variable: STORAGE_BUCKET
+    value: mybucket.firebasestorage.app
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_SUPABASE_URL
+    secret: projects/546396532714/secrets/NEXT_PUBLIC_SUPABASE_URL
+
+    # Same as API_KEY above but with the long form secret reference with pinned version.
+  - variable: NEXT_PUBLIC_SUPABASE_ANON_KEY
+    secret: projects/546396532714/secrets/NEXT_PUBLIC_SUPABASE_ANON_KEY
+  - variable: FASTAPI_URL
+    secret: projects/546396532714/secrets/FASTAPI_URL
