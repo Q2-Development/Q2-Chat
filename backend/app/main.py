@@ -6,7 +6,7 @@ from postgrest.base_request_builder import APIResponse
 from typing import Optional
 import base64
 from app import (
-    LoginItem, PromptItem, supabase, create_temp_user,
+    LoginItem, PromptItem, TitleUpdate, supabase, create_temp_user,
     get_chat_messages, send_chat_prompt, generate_chat_title,
     send_image_prompt, send_pdf_prompt
 )
@@ -74,6 +74,33 @@ def get_login_status():
 def get_logout():
     supabase.auth.sign_out()
     return True
+
+@app.post("/chats/{chat_id}")
+def rename_chat_title(chat_id: str, item: TitleUpdate):
+    """Update a chat's title."""
+    user_resp = supabase.auth.get_user()
+    if not user_resp or not user_resp.user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    user = user_resp.user
+    
+    # Update the title in the 'chats' table
+    response = supabase.table("chats") \
+        .update({"title": item.title}) \
+        .eq("id", chat_id) \
+        .eq("user_id", user.id) \
+        .execute()
+    
+    # Check if the update was successful
+    if not response.data:
+        # Investigate why it failed
+        chat_exists_res = supabase.table("chats").select("id", count='exact').eq("id", chat_id).execute()
+        if chat_exists_res.count == 0:
+            raise HTTPException(status_code=404, detail=f"Chat not found: {chat_id}")
+        else:
+            # The chat exists but doesn't belong to this user or something else went wrong
+            raise HTTPException(status_code=403, detail="Access denied or update failed")
+            
+    return response.data[0]
 
 def get_user_and_chat(chatId: Optional[str]):
     """Determine user (or guest) and ensure chatId exists."""

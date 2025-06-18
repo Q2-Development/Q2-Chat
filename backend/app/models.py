@@ -54,3 +54,6 @@ class ChatResponse(BaseModel):
     title: str
     model: str
     messages: List[MessageResponse] = []
+    
+class TitleUpdate(BaseModel):
+    title: str
