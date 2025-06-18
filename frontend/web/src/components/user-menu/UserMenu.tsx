@@ -6,6 +6,7 @@ import { ProfileSection } from './profile-section';
 import { ApiKeySection } from './api-key-section';
 import { PreferencesSection } from './preferences-section';
 import styles from './UserMenu.module.css';
+import Image from 'next/image';
 
 type ActiveSection = 'profile' | 'auth' | 'apikey' | 'preferences';
 
@@ -120,7 +121,7 @@ export const UserMenu = () => {
           <div className={styles.userInfo}>
             <div className={styles.userAvatar}>
               {user?.user_metadata?.avatar_url ? (
-                <img src={user.user_metadata.avatar_url} alt="Avatar" className={styles.avatarImage} />
+                <Image src={user.user_metadata.avatar_url} alt="Avatar" className={styles.avatarImage} />
               ) : (
                 <IoPerson size={24} />
               )}

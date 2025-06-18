@@ -90,7 +90,7 @@ export default function SetupApiKeyPage() {
           </form>
 
           <div className={styles.helpText}>
-            <p>Don't have an API key? Get one at{' '}
+            <p>Don&apos;t have an API key? Get one at{' '}
               <a 
                 href="https://openrouter.ai/keys" 
                 target="_blank" 

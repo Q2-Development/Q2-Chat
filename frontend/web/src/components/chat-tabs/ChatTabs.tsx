@@ -4,6 +4,7 @@ import { IoAdd, IoClose, IoMenu, IoPerson } from 'react-icons/io5';
 import { useChatStore } from "@/store/chatStore";
 import { useUserStore } from '@/store/userStore';
 import styles from './ChatTabs.module.css';
+import Image from 'next/image';
 
 interface ChatTabsProps {
   chats: Chat[];
@@ -206,7 +207,7 @@ export const ChatTabs = ({
         >
           <div className={styles.userAvatar}>
             {user?.user_metadata?.avatar_url ? (
-              <img src={user.user_metadata.avatar_url} alt="Profile" className={styles.avatarImage} />
+              <Image src={user.user_metadata.avatar_url} alt="Profile" className={styles.avatarImage} />
             ) : (
               <IoPerson size={18} />
             )}

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { IoPerson, IoSave, IoMail, IoCalendar } from 'react-icons/io5';
 import { useUserStore } from '@/store/userStore';
 import styles from './ProfileSection.module.css';
+import Image from 'next/image';
 
 export const ProfileSection = () => {
   const { 
@@ -58,8 +59,8 @@ export const ProfileSection = () => {
           </div>
           <h2 className={styles.guestTitle}>Guest Mode</h2>
           <p className={styles.guestDescription}>
-            You're currently using Q2 Chat as a guest. Your conversations are not saved 
-            and won't sync across devices.
+            You&apos;re currently using Q2 Chat as a guest. Your conversations are not saved 
+            and won&apos;t sync across devices.
           </p>
           <div className={styles.guestFeatures}>
             <h3 className={styles.featuresTitle}>Sign in to unlock:</h3>
@@ -90,7 +91,7 @@ export const ProfileSection = () => {
           <div className={styles.avatarContainer}>
             <div className={styles.avatar}>
               {user?.user_metadata.avatar_url ? (
-                <img src={user?.user_metadata.avatar_url} alt="Profile" className={styles.avatarImage} />
+                <Image src={user?.user_metadata.avatar_url} alt="Profile" className={styles.avatarImage} />
               ) : (
                 <IoPerson size={32} />
               )}
