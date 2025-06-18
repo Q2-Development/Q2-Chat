@@ -20,3 +20,5 @@ env:
     # Same as API_KEY above but with the long form secret reference with pinned version.
   - variable: NEXT_PUBLIC_SUPABASE_ANON_KEY
     secret: projects/546396532714/secrets/NEXT_PUBLIC_SUPABASE_ANON_KEY
+  - variable: FASTAPI_URL
+    secret: projects/546396532714/secrets/FASTAPI_URL
