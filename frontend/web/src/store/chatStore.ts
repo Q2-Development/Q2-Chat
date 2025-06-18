@@ -548,6 +548,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
             signal: controller.signal,
         });
 
+        if (isFirstMessage) {
+            const newChatId = response.headers.get('X-Chat-Id');
+            const newChatTitle = response.headers.get('X-Chat-Title');
+            if (newChatId && newChatTitle) {
+                // This is a new chat, update the store with the definitive ID and title from the backend
+                set(state => {
+                    const oldChatId = chatToStream!.id;
+                    const newVisibleTabIds = state.visibleTabIds.map(id => id === oldChatId ? newChatId : id);
+                    const newAllChats = state.allChats.map(c => c.id === oldChatId ? { ...c, id: newChatId, title: newChatTitle } : c);
+                    const newChats = state.chats.map(c => c.id === oldChatId ? { ...c, id: newChatId, title: newChatTitle } : c);
+
+                    return {
+                        chats: newChats,
+                        allChats: newAllChats,
+                        visibleTabIds: newVisibleTabIds,
+                        activeChatId: newChatId,
+                    }
+                });
+                // Update the chatToStream to the new ID for streaming updates
+                chatToStream = { ...chatToStream!, id: newChatId, title: newChatTitle };
+            }
+        }
+
         if (!response.ok || !response.body) {
             const error = await response.json();
             throw new Error(error.error || `Server responded with ${response.status}`);
@@ -588,9 +611,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ),
         }));
         
-        if (isFirstMessage) {
-            get().updateChatTitle(activeChatId, "New Chat");
-        }
     } catch (error: any) {
         if (error.name === 'AbortError') {
             console.log('Message generation stopped by user.');

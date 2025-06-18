@@ -3,6 +3,7 @@ from postgrest.base_request_builder import APIResponse
 from app.models import PromptItem
 from .prompts import SYSTEM_PROMPT
 from app.auth.supabase_client import supabase
+from app.auth.encryption import encryption
 from postgrest.base_request_builder import APIResponse
 
 import os
@@ -23,9 +24,24 @@ def get_chat_messages(chatId:str):
 # Send chat
 def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIResponse):
     logger.info(f"Prompt: {item.prompt}")
+    
+    api_key = None
+    if not user.is_anonymous:
+        try:
+            result = supabase.table("user_api_keys").select("encrypted_key").eq("user_id", user.id).execute()
+            if result.data and len(result.data) > 0:
+                encrypted_key = result.data[0]['encrypted_key']
+                api_key = encryption.decrypt_api_key(encrypted_key)
+        except Exception as e:
+            logger.error(f"Failed to get user API key: {e}")
+        
+    openrouter_key = api_key or os.getenv("OPEN_ROUTER_KEY")
+    if not openrouter_key:
+        raise Exception("No API key available")
+            
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
-        "Authorization": f'Bearer {os.getenv("OPEN_ROUTER_KEY")}', 
+        "Authorization": f'Bearer {openrouter_key}',
         "Content-Type": "application/json"
     }
 
@@ -120,10 +136,24 @@ def generate_chat_title(prompt: str) -> str:
         logger.error(f"Error generating chat title: {str(e)}")
         return "Untitled Chat"
 
-def stream_multimodal(item: PromptItem, file_field: dict):
+def stream_multimodal(item: PromptItem, user: gotrue.types.User, file_field: dict):
+    api_key = None
+    if not user.is_anonymous:
+        try:
+            result = supabase.table("user_api_keys").select("encrypted_key").eq("user_id", user.id).execute()
+            if result.data and len(result.data) > 0:
+                encrypted_key = result.data[0]['encrypted_key']
+                api_key = encryption.decrypt_api_key(encrypted_key)
+        except Exception as e:
+            logger.error(f"Failed to get user API key: {e}")
+        
+    openrouter_key = api_key or os.getenv("OPEN_ROUTER_KEY")
+    if not openrouter_key:
+        raise Exception("No API key available")
+    
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {os.getenv('OPEN_ROUTER_KEY')}",  # Fixed: was OPENAI_API_KEY
+        "Authorization": f"Bearer {openrouter_key}",
         "Content-Type":  "application/json"
     }
 
@@ -211,13 +241,13 @@ def get_vision_model(requested_model: str) -> str:
     }
     return vision_models.get(requested_model, "openai/gpt-4-vision-preview")
 
-def send_image_prompt(item: PromptItem, file_bytes: bytes, content_type: str):
+def send_image_prompt(item: PromptItem, user: gotrue.types.User, file_bytes: bytes, content_type: str):
     b64 = base64.b64encode(file_bytes).decode("utf-8")
     data_url = f"data:{content_type};base64,{b64}"
     file_field = {"type": "image_url", "image_url": {"url": data_url}}
-    return stream_multimodal(item, file_field)
+    return stream_multimodal(item, user, file_field)
 
-def send_pdf_prompt(item: PromptItem, file_bytes: bytes, content_type: str):
+def send_pdf_prompt(item: PromptItem, user: gotrue.types.User, file_bytes: bytes, content_type: str):
     """
     Handle PDF files by converting to text first, since most LLMs don't support PDF directly.
     We'll use a text-based approach similar to CSV handling.
@@ -242,20 +272,34 @@ def send_pdf_prompt(item: PromptItem, file_bytes: bytes, content_type: str):
         """
         
         # Use the regular chat prompt function with enhanced text
-        return send_text_prompt(item, enhanced_prompt)
+        return send_text_prompt(item, user, enhanced_prompt)
         
     except Exception as e:
         logger.error(f"Error processing PDF file: {str(e)}")
         error_msg = f"Error processing PDF file: {str(e)}"
-        return send_text_prompt(item, error_msg)
+        return send_text_prompt(item, user, error_msg)
 
-def send_text_prompt(item: PromptItem, prompt_text: str):
+def send_text_prompt(item: PromptItem, user: gotrue.types.User, prompt_text: str):
     """
     (used for CSV and PDF fallbacks)
     """
+    api_key = None
+    if not user.is_anonymous:
+        try:
+            result = supabase.table("user_api_keys").select("encrypted_key").eq("user_id", user.id).execute()
+            if result.data and len(result.data) > 0:
+                encrypted_key = result.data[0]['encrypted_key']
+                api_key = encryption.decrypt_api_key(encrypted_key)
+        except Exception as e:
+            logger.error(f"Failed to get user API key: {e}")
+        
+    openrouter_key = api_key or os.getenv("OPEN_ROUTER_KEY")
+    if not openrouter_key:
+        raise Exception("No API key available")
+    
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {os.getenv('OPEN_ROUTER_KEY')}",
+        "Authorization": f"Bearer {openrouter_key}",
         "Content-Type":  "application/json"
     }
 

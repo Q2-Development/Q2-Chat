@@ -5,16 +5,14 @@ import { ChatInput } from "@/components/chat-input";
 import { ChatTabs } from "@/components/chat-tabs";
 import { SidebarTabs } from "@/components/sidebar-tabs";
 import { ChatBody } from "@/components/chat-body";
-// import { UserMenu } from "@/components/user-menu";
+import { UserMenu } from "@/components/user-menu";
+import { AuthGuard } from "@/components/auth-guard";
 import { useChatStore } from "@/store/chatStore";
 import { useUserStore } from "@/store/userStore";
 import { Chat } from "@/types/chat";
 import { useToastListener } from '@/hooks/useToastListener';
 
-
-export default function ChatPage() {
-  useToastListener();
-
+function ChatInterface() {
   const {
     chats,
     allChats,
@@ -48,12 +46,9 @@ export default function ChatPage() {
     handleDragEnd,
   } = useChatStore();
 
-  const { initializeSession } = useUserStore();
-
   useEffect(() => {
     fetchAllChats();
-    initializeSession();
-  }, [fetchAllChats, initializeSession]);
+  }, [fetchAllChats]);
 
   const activeChat = chats.find((c: Chat) => c.id === activeChatId)!;
 
@@ -116,7 +111,22 @@ export default function ChatPage() {
         )}
       </div>
 
-      {/* <UserMenu /> */}
+      <UserMenu />
     </div>
+  );
+}
+
+export default function ChatPage() {
+  useToastListener();
+  const { initializeSession } = useUserStore();
+
+  useEffect(() => {
+    initializeSession();
+  }, [initializeSession]);
+
+  return (
+    <AuthGuard>
+      <ChatInterface />
+    </AuthGuard>
   );
 }
