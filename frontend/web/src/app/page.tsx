@@ -41,6 +41,8 @@ function ChatInterface() {
     fetchModels,
     setModelSearch,
     fetchAllChats,
+    refreshChats,
+    fetchChatMessages,
     setDragState,
     handleDragStart,
     handleDragEnd,
@@ -62,7 +64,7 @@ function ChatInterface() {
         dragState={dragState}
         closeChat={closeChat}
         moveFromSidebar={moveFromSidebar}
-        fetchAllChats={fetchAllChats}
+        refreshChats={refreshChats}
         setDragState={setDragState}
         handleDragStart={handleDragStart}
         handleDragEnd={handleDragEnd}

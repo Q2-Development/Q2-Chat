@@ -69,7 +69,7 @@ interface ChatState {
   chatsLoading: boolean;
   chatsLoaded: boolean;
   dragState: DragState;
-  setActiveChatId: (id: string) => void;
+  setActiveChatId: (id: string) => Promise<void>;
   handleInputChange: (text: string) => void;
   handleModelChange: (model: string) => void;
   handleSendMessage: () => void;
@@ -78,7 +78,7 @@ interface ChatState {
   closeChat: (chatId: string) => void;
   renameChat: (chatId: string, newTitle: string) => void;
   toggleSidebar: () => void;
-  moveFromSidebar: (chatId: string) => void;
+  moveFromSidebar: (chatId: string) => Promise<void>;
   moveToSidebar: (chatId: string) => void;
   updateChatTitle: (chatId: string, title: string) => void;
   addPendingFiles: (files: FileList | File[]) => Promise<{ success: File[], errors: string[] }>;
@@ -87,6 +87,8 @@ interface ChatState {
   fetchModels: () => Promise<void>;
   setModelSearch: (search: string) => void;
   fetchAllChats: () => Promise<void>;
+  refreshChats: () => Promise<void>;
+  fetchChatMessages: (chatId: string) => Promise<void>;
   setDragState: (state: Partial<DragState>) => void;
   clearDragState: () => void;
   handleDragStart: (chatId: string, from: 'tab' | 'sidebar') => void;
@@ -126,7 +128,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     dropZone: null,
   },
 
-  setActiveChatId: (id: string) => set({ activeChatId: id }),
+  setActiveChatId: async (id: string) => {
+    set({ activeChatId: id });
+    
+    // Check if the chat needs messages loaded
+    const { chats, allChats } = get();
+    const activeChat = chats.find(c => c.id === id) || allChats.find(c => c.id === id);
+    
+    if (activeChat && activeChat.messages.length === 0) {
+      // Fetch messages for this chat
+      await get().fetchChatMessages(id);
+    }
+  },
   toggleSidebar: () => set(state => ({ isSidebarOpen: !state.isSidebarOpen })),
 
   handleInputChange: (text: string) => {
@@ -195,6 +208,46 @@ export const useChatStore = create<ChatState>((set, get) => ({
         chatsLoading: false,
         chatsLoaded: true
       });
+    }
+  },
+
+  refreshChats: async () => {
+    // Force a refresh by resetting the loaded state and calling fetchAllChats
+    set({ chatsLoaded: false, chatsLoading: false });
+    await get().fetchAllChats();
+  },
+
+  fetchChatMessages: async (chatId: string) => {
+    try {
+      const response = await fetch(`/api/chat/${chatId}/messages`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      const backendMessages = data.messages || [];
+      
+      // Convert backend messages to frontend Message format
+      const frontendMessages: Message[] = backendMessages.map((msg: any) => ({
+        id: generateUUID(),
+        text: msg.content || '',
+        isUser: msg.speaker === 'User',
+        timestamp: new Date(msg.created_at || new Date()),
+        isStreaming: false,
+      }));
+
+      // Update both chats and allChats with the fetched messages
+      set(state => {
+        const updateChatWithMessages = (chat: Chat) => 
+          chat.id === chatId ? { ...chat, messages: frontendMessages } : chat;
+        
+        return {
+          chats: [...state.chats.map(updateChatWithMessages)],
+          allChats: [...state.allChats.map(updateChatWithMessages)],
+        };
+      });
+    } catch (error) {
+      console.error('Failed to fetch chat messages:', error);
+      toast.error('Failed to load chat messages');
     }
   },
 
@@ -291,13 +344,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   updateChatTitle: (chatId: string, title: string) => {
-    set({
-      chats: get().chats.map((chat) =>
-        chat.id === chatId ? { ...chat, title } : chat
-      ),
-      allChats: get().allChats.map((chat) =>
-        chat.id === chatId ? { ...chat, title } : chat
-      ),
+    set(state => {
+      const updateChat = (chat: Chat) => chat.id === chatId ? { ...chat, title } : chat;
+      return {
+        chats: [...state.chats.map(updateChat)],
+        allChats: [...state.allChats.map(updateChat)],
+      };
     });
   },
 
@@ -556,13 +608,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 set(state => {
                     const oldChatId = chatToStream!.id;
                     const newVisibleTabIds = state.visibleTabIds.map(id => id === oldChatId ? newChatId : id);
-                    const newAllChats = state.allChats.map(c => c.id === oldChatId ? { ...c, id: newChatId, title: newChatTitle } : c);
-                    const newChats = state.chats.map(c => c.id === oldChatId ? { ...c, id: newChatId, title: newChatTitle } : c);
+                    
+                    // Update both chats and allChats arrays with new ID and title
+                    const updateChat = (c: Chat) => c.id === oldChatId ? { ...c, id: newChatId, title: newChatTitle } : c;
+                    const newChats = state.chats.map(updateChat);
+                    const newAllChats = state.allChats.map(updateChat);
 
+                    // Ensure we have fresh arrays to trigger React re-renders
                     return {
-                        chats: newChats,
-                        allChats: newAllChats,
-                        visibleTabIds: newVisibleTabIds,
+                        chats: [...newChats],
+                        allChats: [...newAllChats],
+                        visibleTabIds: [...newVisibleTabIds],
                         activeChatId: newChatId,
                     }
                 });
@@ -705,7 +761,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  moveFromSidebar: (chatId: string) => {
+  moveFromSidebar: async (chatId: string) => {
     const { visibleTabIds, chats, allChats } = get();
     const chatToMove = allChats.find(c => c.id === chatId);
     if (!chatToMove) return;
@@ -726,6 +782,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         visibleTabIds: [...visibleTabIds, chatId],
         activeChatId: chatId,
       });
+    }
+
+    // Load messages if the chat doesn't have any
+    if (chatToMove.messages.length === 0) {
+      await get().fetchChatMessages(chatId);
     }
   },
 }));
