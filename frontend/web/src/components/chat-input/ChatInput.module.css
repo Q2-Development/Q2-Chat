@@ -269,6 +269,28 @@
     font-weight: 500;
 }
 
+.webSearchButton {
+    padding: 0.5rem 0.875rem;
+    border-radius: 1.5rem;
+    min-height: 2.5rem;
+    transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.webSearchButton span {
+    margin-left: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.webSearchButtonActive {
+    background-color: #059669; /* green-600 */
+    color: white;
+}
+
+.webSearchButtonActive:hover {
+    background-color: #047857; /* green-700 */
+}
+
 /* New model selector styles */
 .modelSelectorContainer {
     position: relative;

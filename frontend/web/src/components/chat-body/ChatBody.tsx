@@ -1,7 +1,7 @@
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { IoCopyOutline, IoCheckmark, IoDocumentText, IoImage, IoDownload } from 'react-icons/io5';
+import { IoCopyOutline, IoCheckmark, IoDocumentText, IoImage, IoDownload, IoSearch } from 'react-icons/io5';
 import { FaFileCsv } from "react-icons/fa6";
 import { useState } from 'react';
 import styles from './ChatBody.module.css';
@@ -13,6 +13,7 @@ interface Message {
   isUser: boolean;
   timestamp: Date;
   isStreaming?: boolean;
+  webSearchUsed?: boolean;
   file?: {
     type: string;
     url: string;
@@ -206,7 +207,14 @@ export const ChatBody = ({ messages }: { messages: Message[] }) => {
               {msg.isUser ? (
                 <div className="whitespace-pre-line">{msg.text}</div>
               ) : (
-                <div className="prose prose-invert prose-neutral max-w-none">
+                <>
+                  {msg.webSearchUsed && (
+                    <div className={styles.webSearchIndicator}>
+                      <IoSearch size={12} />
+                      <span>Web search enabled</span>
+                    </div>
+                  )}
+                  <div className="prose prose-invert prose-neutral max-w-none">
                   <ReactMarkdown
                     components={{
                       code: CodeBlock,
@@ -281,7 +289,8 @@ export const ChatBody = ({ messages }: { messages: Message[] }) => {
                   >
                     {msg.text}
                   </ReactMarkdown>
-                </div>
+                  </div>
+                </>
               )}
               {msg.isStreaming && (
                 <span className="inline-block w-2 h-5 bg-white ml-1 animate-pulse" />

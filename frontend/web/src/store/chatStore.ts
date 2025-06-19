@@ -72,6 +72,7 @@ interface ChatState {
   setActiveChatId: (id: string) => Promise<void>;
   handleInputChange: (text: string) => void;
   handleModelChange: (model: string) => void;
+  handleWebSearchToggle: () => void;
   handleSendMessage: () => void;
   stopGenerating: () => void;
   addNewChat: () => void;
@@ -106,7 +107,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     messages: [],
     input: "",
     model: getInitialModel(),
-    pendingFiles: []
+    pendingFiles: [],
+    webSearchEnabled: false
   }],
   allChats: [],
   visibleTabIds: [initialChatId],
@@ -160,6 +162,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
+  handleWebSearchToggle: () => {
+    const { activeChatId, chats } = get();
+    set({
+      chats: chats.map((chat) =>
+        chat.id === activeChatId 
+          ? { ...chat, webSearchEnabled: !chat.webSearchEnabled } 
+          : chat
+      ),
+    });
+  },
+
   setModelSearch: (search: string) => {
     set({ modelSearch: search });
   },
@@ -187,7 +200,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
             messages: [],
             input: "",
             model: "openai/gpt-4o",
-            pendingFiles: []
+            pendingFiles: [],
+            webSearchEnabled: false
           });
         }
       }
@@ -578,7 +592,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     ...chat,
                     messages: [
                         ...chat.messages,
-                        { id: assistantMessageId, text: "", isUser: false, timestamp: new Date(), isStreaming: true },
+                        { 
+                            id: assistantMessageId, 
+                            text: "", 
+                            isUser: false, 
+                            timestamp: new Date(), 
+                            isStreaming: true,
+                            webSearchUsed: chatToStream!.webSearchEnabled || false
+                        },
                     ],
                     input: '',
                     pendingFiles: [],
@@ -595,6 +616,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 message: userMessage.text,
                 model: chatToStream!.model,
                 chatId: chatToStream!.id,
+                webSearchEnabled: chatToStream!.webSearchEnabled || false,
                 // openRouterApiKey: !isAuthenticated ? openRouterApiKey : undefined,  
             }),
             signal: controller.signal,
@@ -699,7 +721,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: [],
       input: "",
       model: defaultModel,
-      pendingFiles: []
+      pendingFiles: [],
+      webSearchEnabled: false
     };
     
     const allChats = [...chats, newChat];
