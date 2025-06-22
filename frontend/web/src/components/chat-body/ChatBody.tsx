@@ -6,6 +6,7 @@ import { FaFileCsv } from "react-icons/fa6";
 import { useState } from 'react';
 import styles from './ChatBody.module.css';
 import Image from 'next/image';
+import SourceBubble from '../source-bubble/SourceBubble';
 
 interface Message {
   id: string;
@@ -258,14 +259,7 @@ export const ChatBody = ({ messages }: { messages: Message[] }) => {
                       strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
                       em: ({ children }) => <em className="italic text-white">{children}</em>,
                       a: ({ children, href }) => (
-                        <a 
-                          href={href} 
-                          className="text-blue-400 hover:text-blue-300 underline"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {children}
-                        </a>
+                        <SourceBubble href={href || ''} />
                       ),
                       table: ({ children }) => (
                         <div className="overflow-x-auto mb-3">
