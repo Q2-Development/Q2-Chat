@@ -259,7 +259,7 @@ export const ChatBody = ({ messages }: { messages: Message[] }) => {
                       strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
                       em: ({ children }) => <em className="italic text-white">{children}</em>,
                       a: ({ children, href }) => (
-                        <SourceBubble href={href || ''} />
+                        <SourceBubble href={href || ''}>{children}</SourceBubble>
                       ),
                       table: ({ children }) => (
                         <div className="overflow-x-auto mb-3">
