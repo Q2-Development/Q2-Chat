@@ -12,6 +12,7 @@ class PromptItem(BaseModel):
     chatId: str  # Changed to be required
     model: str
     prompt: str
+    webSearchEnabled: Optional[bool] = False
 
 class UpdateTitleItem(BaseModel):
     title: str

@@ -31,6 +31,7 @@ function ChatInterface() {
     handleSendMessage,
     stopGenerating,
     handleModelChange,
+    handleWebSearchToggle,
     addNewChat,
     closeChat,
     toggleSidebar,
@@ -41,6 +42,8 @@ function ChatInterface() {
     fetchModels,
     setModelSearch,
     fetchAllChats,
+    refreshChats,
+    fetchChatMessages,
     setDragState,
     handleDragStart,
     handleDragEnd,
@@ -62,7 +65,7 @@ function ChatInterface() {
         dragState={dragState}
         closeChat={closeChat}
         moveFromSidebar={moveFromSidebar}
-        fetchAllChats={fetchAllChats}
+        refreshChats={refreshChats}
         setDragState={setDragState}
         handleDragStart={handleDragStart}
         handleDragEnd={handleDragEnd}
@@ -98,6 +101,7 @@ function ChatInterface() {
               modelsError={modelsError}
               modelSearch={modelSearch}
               isSendingMessage={isSendingMessage}
+              webSearchEnabled={activeChat.webSearchEnabled || false}
               onInputChange={(text) => handleInputChange(text)}
               onSend={handleSendMessage}
               onStop={stopGenerating}
@@ -106,6 +110,7 @@ function ChatInterface() {
               onRemoveFile={removePendingFile}
               onFetchModels={fetchModels}
               onModelSearch={setModelSearch}
+              onWebSearchToggle={handleWebSearchToggle}
             />
           </>
         )}

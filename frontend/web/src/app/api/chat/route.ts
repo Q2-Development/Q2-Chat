@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
   try {
-    const { message, model = "openai/gpt-3.5-turbo", chatId } = await request.json();
+    const { message, model = "openai/gpt-3.5-turbo", chatId, webSearchEnabled = false } = await request.json();
 
     const backendResponse = await fetch(`${process.env.FASTAPI_URL || 'http://localhost:8000'}/chat`, {
       method: 'POST',
@@ -12,7 +12,8 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model: model,
         prompt: message,
-        chatId: chatId
+        chatId: chatId,
+        webSearchEnabled: webSearchEnabled
       })
     });
 

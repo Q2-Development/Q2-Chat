@@ -353,6 +353,42 @@ def get_chat_title(chat_id: str):
     # resp.data looks like {"title": "Your Generated Title"}
     return {"chatId": chat_id, "title": resp.data["title"]}
 
+@app.get("/chats/{chat_id}/messages")
+def get_chat_messages_endpoint(chat_id: str):
+    """Get all messages for a specific chat."""
+    try:
+        # Check if user is authenticated
+        user_resp = supabase.auth.get_user()
+        if not user_resp:
+            logger.info("Guest Mode active")
+            user = create_temp_user().user
+        else:
+            user = user_resp.user
+        
+        # Verify the chat belongs to the user
+        chat_check = supabase.table("chats") \
+            .select("id") \
+            .eq("id", chat_id) \
+            .eq("user_id", user.id) \
+            .execute()
+        
+        if not chat_check.data:
+            raise HTTPException(status_code=404, detail="Chat not found or access denied")
+        
+        # Get messages for the chat
+        messages_resp = get_chat_messages(chat_id)
+        
+        # Sort messages by creation time
+        messages = messages_resp.data
+        if messages:
+            messages.sort(key=lambda m: m.get("created_at", ""))
+        
+        return {"chatId": chat_id, "messages": messages or []}
+        
+    except Exception as e:
+        logger.error(f"Error fetching messages for chat {chat_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch messages")
+
 
 @app.get("/user/api-key-status")
 async def get_api_key_status(request: Request):

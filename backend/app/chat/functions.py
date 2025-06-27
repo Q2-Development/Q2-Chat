@@ -58,9 +58,16 @@ def send_chat_prompt(item: PromptItem, user: gotrue.types.User, messages: APIRes
     print(messagesInApiFormat)
     # return
 
+    # Determine the model to use based on web search setting
+    model_to_use = item.model
+    if item.webSearchEnabled:
+        # Use the :online suffix for web search capability
+        if not item.model.endswith(":online"):
+            model_to_use = f"{item.model}:online"
+    
     # Actual API payload
     payload = {
-        "model": item.model,
+        "model": model_to_use,
         "messages": [
             *messagesInApiFormat,
             {"role": "user", "content": item.prompt}
@@ -167,6 +174,10 @@ def stream_multimodal(item: PromptItem, user: gotrue.types.User, file_field: dic
 
     # 2) build payload - ensure we use a vision-capable model
     vision_model = get_vision_model(item.model)
+    
+    # Apply web search if enabled
+    if item.webSearchEnabled and not vision_model.endswith(":online"):
+        vision_model = f"{vision_model}:online"
     
     multimodal = {
         "role":    "user",
@@ -311,9 +322,14 @@ def send_text_prompt(item: PromptItem, user: gotrue.types.User, prompt_text: str
         "speaker":     "User"
     }).execute()
 
+    # Determine the model to use based on web search setting
+    model_to_use = item.model
+    if item.webSearchEnabled and not item.model.endswith(":online"):
+        model_to_use = f"{item.model}:online"
+    
     # Build payload for text-based analysis
     payload = {
-        "model": item.model, 
+        "model": model_to_use, 
         "messages": [
             {"role": "user", "content": prompt_text}
         ], 

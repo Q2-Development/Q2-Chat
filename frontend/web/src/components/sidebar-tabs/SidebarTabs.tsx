@@ -16,7 +16,7 @@ interface SidebarTabsProps {
   };
   closeChat: (id: string) => void;
   moveFromSidebar: (id: string) => void;
-  fetchAllChats: () => Promise<void>;
+  refreshChats: () => Promise<void>;
   setDragState: (state: any) => void;
   handleDragStart: (chatId: string, from: 'tab' | 'sidebar') => void;
   handleDragEnd: () => void;
@@ -30,7 +30,7 @@ export const SidebarTabs = ({
   dragState,
   closeChat,
   moveFromSidebar,
-  fetchAllChats,
+  refreshChats,
   setDragState,
   handleDragStart,
   handleDragEnd,
@@ -44,7 +44,7 @@ export const SidebarTabs = ({
 
   const handleRefreshChats = () => {
     if (!chatsLoading) {
-      fetchAllChats();
+      refreshChats();
     }
   };
 
@@ -90,7 +90,9 @@ export const SidebarTabs = ({
           title="Refresh chats"
         >
           {chatsLoading ? (
-            <Loader2 size={16} className={styles.spinIcon} />
+            <div className={styles.spinIcon}>
+              <Loader2 size={16} />
+            </div>
           ) : (
             <IoRefresh size={16} />
           )}

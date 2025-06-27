@@ -4,6 +4,7 @@ export interface Message {
   isUser: boolean;
   timestamp: Date;
   isStreaming?: boolean;
+  webSearchUsed?: boolean;
   file?: {
     type: string;
     url: string;
@@ -25,6 +26,7 @@ export interface Chat {
   input: string;
   model: string;
   pendingFiles: PendingFile[];
+  webSearchEnabled?: boolean;
 }
 
 export const MAX_VISIBLE_TABS = 5;

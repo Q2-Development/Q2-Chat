@@ -18,6 +18,7 @@ interface ChatInputProps {
     modelsError: string | null;
     modelSearch: string;
     isSendingMessage: boolean;
+    webSearchEnabled: boolean;
     onInputChange: (text: string) => void;
     onModelChange: (model: string) => void;
     onSend: () => void;
@@ -26,6 +27,7 @@ interface ChatInputProps {
     onRemoveFile: (fileId: string) => void;
     onFetchModels: () => Promise<void>;
     onModelSearch: (search: string) => void;
+    onWebSearchToggle: () => void;
 }
 
 export const ChatInput = ({ 
@@ -37,6 +39,7 @@ export const ChatInput = ({
     modelsError,
     modelSearch,
     isSendingMessage,
+    webSearchEnabled,
     onInputChange, 
     onSend, 
     onStop,
@@ -44,7 +47,8 @@ export const ChatInput = ({
     onAddFiles,
     onRemoveFile,
     onFetchModels,
-    onModelSearch
+    onModelSearch,
+    onWebSearchToggle
 }: ChatInputProps) => {
     const [showModelDropdown, setShowModelDropdown] = useState(false);
     const [isDragOver, setIsDragOver] = useState(false);
@@ -357,6 +361,14 @@ export const ChatInput = ({
                     >
                         <IoOptionsOutline size={22} />
                         <span>Tools</span>
+                    </button>
+                    <button 
+                        onClick={onWebSearchToggle}
+                        className={`${styles.button} ${styles.webSearchButton} ${webSearchEnabled ? styles.webSearchButtonActive : ''}`}
+                        title={webSearchEnabled ? "Web search enabled" : "Web search disabled"}
+                    >
+                        <IoSearch size={20} />
+                        <span>Web</span>
                     </button>
                 </div>
 
